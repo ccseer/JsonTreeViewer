@@ -2,21 +2,21 @@ QT += gui core widgets
 
 TEMPLATE = lib
 CONFIG += plugin
-# SOURCES += test.cpp
+# SOURCES += src/test.cpp
 
 CONFIG += c++17
 
 
 SOURCES += \
-    jsontreemodel.cpp \
-    jsontreeview.cpp \
-    jsontreeviewer.cpp
+    src/jsontreemodel.cpp \
+    src/jsontreeview.cpp \
+    src/jsontreeviewer.cpp
 
 HEADERS += \
-    jsonnode.h \
-    jsontreemodel.h \
-    jsontreeview.h \
-    jsontreeviewer.h
+    src/jsonnode.h \
+    src/jsontreemodel.h \
+    src/jsontreeview.h \
+    src/jsontreeviewer.h
 
 DISTFILES += JsonTreeViewer.json
 
