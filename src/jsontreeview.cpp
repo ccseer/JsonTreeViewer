@@ -10,6 +10,9 @@ JsonTreeView::JsonTreeView(QWidget *parent) : QTreeView(parent)
 
 void JsonTreeView::upadteDPR(qreal r)
 {
+    if (!isVisible()) {
+        return;
+    }
     setIndentation(22 * r);
     scheduleDelayedItemsLayout();
     QTimer::singleShot(0, this,
