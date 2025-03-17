@@ -1,0 +1,56 @@
+# =====================
+# Qt Core Ignore Rules
+# =====================
+*.pro.user        # Qt Creator user settings (IDE-specific configs) 
+*.pro.user.*      # Temporary Qt Creator auto-save files
+*.autosave        # IDE crash recovery files
+
+# =====================
+# Build Artifacts
+# =====================
+build*/           # CMake/QMake output directories (wildcard match)
+release/          # Release build outputs
+debug/            # Debug build outputs
+*.vcxproj*        # Visual Studio project files (MSVC integration)
+
+# =====================
+# Compiled Files
+# =====================
+*.obj             # Object files
+*.pdb             # Program database (debug symbols)
+*.ilk             # Incremental linker files
+*.exe             # Executables (both debug/release)
+*.dll             # Dynamic link libraries
+
+# =====================
+# Qt Meta-Object System
+# =====================
+moc_*.cpp         # Meta-object compiler outputs
+ui_*.h            # UIC-generated header files
+qrc_*.cpp         # Resource compiler outputs
+*.moc             # Machine object code files
+
+# =====================
+# IDE/Editor Configs
+# =====================
+.vs/              # Visual Studio workspace files (15GB+ cache typical)
+.idea/            # JetBrains CLion configs
+*.sln             # Solution files (contain build configurations)
+
+# =====================
+# Advanced Patterns
+# =====================
+# Negation example (keep specific DLL):
+# !/build/Release/essential.dll
+
+# Recursive ignore:
+**/temp/          # Ignore 'temp' folders at any depth 
+
+# File type exclusion:
+*.log             # Application logs 
+*.tmp             # Temporary files
+
+# =====================
+simdjson/*
+JsonTreeViewer.pro.user*
+.vscode
