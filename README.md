@@ -21,6 +21,7 @@ To build and run JsonTreeViewer:
    - ```bash
         # TEMPLATE = lib
         # CONFIG += plugin
+        # TARGET_EXT = .dll
         SOURCES += src/test.cpp
         ```
    - Build as exe
