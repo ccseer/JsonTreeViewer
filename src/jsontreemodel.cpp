@@ -282,7 +282,7 @@ bool JsonTreeModel::hasChildNode(ondemand::value value) const
 
 QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
 {
-    if (!parent_item->has_children) {
+    if (!parent_item || !parent_item->has_children) {
         return {};
     }
     if (!parent_item->children.isEmpty()) {
