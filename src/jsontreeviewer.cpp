@@ -93,7 +93,10 @@ void JsonTreeViewer::loadImpl(QBoxLayout *lay_content, QHBoxLayout *lay_ctrlbar)
     initTopWnd();
     lay_content->addWidget(m_top.wnd_bg);
     JsonTreeModel *m = new JsonTreeModel(this);
-    m->load(m_d->d->path);
+    if (!m->load(m_d->d->path)){
+        emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
+        return;
+    }
     auto proxy_model = new TreeFilterProxyModel(this);
     proxy_model->setSourceModel(m);
     QTimer *timer = new QTimer(this);

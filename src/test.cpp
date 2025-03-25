@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QString>
 
 #include "jsontreeviewer.h"
@@ -15,9 +16,12 @@ int main(int argc, char* argv[])
     p->d->dpr = 1;
     // p->d->path     = "D:/1.json";
     p->d->path = "D:/c.json";
-     //p->d->path  = "D:/d.json";
-
-    p->d->path = "C:/d/2.json";
+    p->d->path = "D:/bug - Copy.json";
+    // p->d->path = "C:/d/2.json";
+    if (!QFile::exists(p->d->path)) {
+        qDebug() << "file not found" << p->d->path;
+        return -1;
+    }
     p->d->theme = 1;
     p->d->type  = viewer.name();
     viewer.setWindowTitle(p->d->path);

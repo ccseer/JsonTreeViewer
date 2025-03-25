@@ -13,7 +13,7 @@ public:
     ~JsonTreeModel() override;
 
     static QString toEscaped(const QString& key);
-    void load(const QString& path);
+    bool load(const QString& path);
     void loadEverything();
     // QModelIndex navigateToPath(const QString& path);
 

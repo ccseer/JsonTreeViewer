@@ -50,20 +50,28 @@ JsonTreeModel::~JsonTreeModel()
     delete m_root_item;
 }
 
-void JsonTreeModel::load(const QString& path)
+bool JsonTreeModel::load(const QString& path)
 {
     if (auto e = padded_string::load(path.toUtf8().data()).get(m_json_data)) {
         qprintt << "Failed to load file with alignment" << e;
-        return;
+        return false;
     }
-    m_doc      = m_parser.iterate(m_json_data);
+    m_doc = m_parser.iterate(m_json_data);
+    if (m_doc.is_alive()) {
+        qprintt << "JSON parsing error";
+        return false;
+    }
     auto items = extractChildren(m_root_item);
-    if (!items.isEmpty()) {
-        beginInsertRows({}, 0, items.count() - 1);
-        m_root_item->children.append(items);
-        endInsertRows();
+    if (items.isEmpty()) {
+        qprintt << "extractChildren: empty";
+        return false;
     }
+
+    beginInsertRows({}, 0, items.count() - 1);
+    m_root_item->children.append(items);
+    endInsertRows();
     m_root_item->has_children = !m_root_item->children.isEmpty();
+    return true;
 }
 
 void JsonTreeModel::loadEverything()
