@@ -62,7 +62,7 @@ QSize JsonTreeViewer::getContentSize() const
 void JsonTreeViewer::updateDPR(qreal r)
 {
     m_d->d->dpr = r;
-    
+
     layout()->setSpacing(6 * r);
     auto font = qApp->font();
     font.setPixelSize(12 * r);
@@ -93,7 +93,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout *lay_content, QHBoxLayout *lay_ctrlbar)
     initTopWnd();
     lay_content->addWidget(m_top.wnd_bg);
     JsonTreeModel *m = new JsonTreeModel(this);
-    if (!m->load(m_d->d->path)){
+    if (!m->load(m_d->d->path)) {
         emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
         return;
     }

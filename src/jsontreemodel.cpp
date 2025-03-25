@@ -56,14 +56,18 @@ bool JsonTreeModel::load(const QString& path)
         qprintt << "Failed to load file with alignment" << e;
         return false;
     }
-    m_doc = m_parser.iterate(m_json_data);
-    if (m_doc.is_alive()) {
-        qprintt << "JSON parsing error";
-        return false;
+
+    QVector<JsonTreeItem*> items;
+    try {
+        m_doc = m_parser.iterate(m_json_data);
+        items = extractChildren(m_root_item);
+        if (items.isEmpty()) {
+            qprintt << "extractChildren: empty";
+            return false;
+        }
     }
-    auto items = extractChildren(m_root_item);
-    if (items.isEmpty()) {
-        qprintt << "extractChildren: empty";
+    catch (...) {
+        qprintt << "exception:" << Q_FUNC_INFO;
         return false;
     }
 
