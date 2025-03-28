@@ -1,0 +1,17 @@
+{
+    "name": "JsonTreeViewer",
+    "version": "1.0.0",
+    "type": "dll",
+    "roles": [
+        "viewer"
+    ],
+    "entry": "JsonTreeViewer.dll",
+    "args": [],
+    "formats": [
+        "json"
+    ],
+    "appMinVersion": "3.9.10",
+    "author": "corey",
+    "description": "A plugin for previewing JSON files.\nhttps://www.1218.io",
+    "releaseDate": "2025-03-27"
+}
