@@ -17,25 +17,27 @@ To build and run JsonTreeViewer:
    ```bash
    git clone --recursive https://github.com/ccseer/JsonTreeViewer.git
    ```
+
 2. **Open `JsonTreeViewer.pro`**
    - ```bash
         # TEMPLATE = lib
         # CONFIG += plugin
         # TARGET_EXT = .dll
         SOURCES += src/test.cpp
-        ```
+     ```
    - Build as exe
 3. **Open the Project**
 
-    Open JsonTreeViewer.pro with your preferred Qt development environment.
+   Open JsonTreeViewer.pro with your preferred Qt development environment.
 
 4. **Build and Run**
 
-    Compile and run the project within the Qt environment.
-
-
+   Compile and run the project within the Qt environment.
 
 ## Seer Plugin
 
 Developed as a DLL plugin for Seer 4.0.0
- 
+
+### TODO:
+
+- expand path

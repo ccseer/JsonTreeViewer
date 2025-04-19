@@ -54,3 +54,4 @@ qrc_*.cpp         # Resource compiler outputs
 simdjson/*
 JsonTreeViewer.pro.user*
 .vscode
+*.dll
