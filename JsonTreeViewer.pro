@@ -2,10 +2,10 @@ QT += gui core widgets
 TARGET  = jsontreeviewer
 CONFIG += c++17
 
-# TEMPLATE = lib
-# CONFIG += plugin
-# TARGET_EXT = .dll
-SOURCES += src/test.cpp
+TEMPLATE = lib
+CONFIG += plugin
+TARGET_EXT = .dll
+# SOURCES += src/test.cpp
 
 SOURCES += \
     src/jsontreemodel.cpp \
