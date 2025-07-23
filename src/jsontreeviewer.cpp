@@ -10,6 +10,7 @@
 
 #include "jsontreemodel.h"
 #include "jsontreeview.h"
+#include "seer/viewer_helper.h"
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
 
@@ -55,7 +56,16 @@ void JsonTreeViewer::initTopWnd()
 
 QSize JsonTreeViewer::getContentSize() const
 {
-    return QSize{600, 800} * m_d->d->dpr;
+    const auto sz_def = m_d->d->dpr * QSize{600, 800};
+    auto cmd          = property(g_property_key_cmd).toStringList();
+    if (!cmd.isEmpty()) {
+        auto parsed = seer::parseViewerSizeFromConfig(cmd);
+        qprintt << "getContentSize: parsed" << parsed << cmd;
+        if (parsed.isValid()) {
+            return parsed;
+        }
+    }
+    return sz_def;
 }
 
 void JsonTreeViewer::updateDPR(qreal r)
