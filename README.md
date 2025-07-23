@@ -41,4 +41,4 @@ Developed as a DLL plugin for Seer 4.0.0
 ### TODO:
 
 - expand path
-- read size from json config
+- threading?

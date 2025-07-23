@@ -9,6 +9,7 @@ using namespace simdjson;
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
 
+namespace {
 constexpr auto g_type_obj = "Object";
 constexpr auto g_type_arr = "Array";
 // constexpr auto g_type_str  = "String";
@@ -16,6 +17,7 @@ constexpr auto g_type_arr = "Array";
 // constexpr auto g_type_bool = "Boolean";
 
 enum ColumnIndex : uchar { CI_Key = 0, CI_Value = 1, CI_Count };
+}  // namespace
 
 QString JsonTreeModel::toEscaped(const QString& key)
 {
@@ -42,6 +44,7 @@ JsonTreeModel::JsonTreeModel(QObject* parent)
       m_root_item(new JsonTreeItem(
           "root", {}, static_cast<char>(ondemand::json_type::null)))
 {
+    qprintt << "SIMDJSON_VERSION" << SIMDJSON_VERSION;
     m_root_item->has_children = true;
 }
 

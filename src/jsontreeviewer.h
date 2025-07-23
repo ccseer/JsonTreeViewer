@@ -8,8 +8,6 @@ class QPushButton;
 
 class JsonTreeViewer : public ViewerBase {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID ViewerBase_iid FILE "JsonTreeViewer.json")
-    Q_INTERFACES(ViewerBase)
 public:
     explicit JsonTreeViewer(QWidget* parent = nullptr);
     ~JsonTreeViewer() override;
@@ -36,4 +34,16 @@ private:
     QPushButton* m_btn_text_view;
 
     JsonTreeView* m_view;
+};
+
+/////////////////////////////////////////////////////////////////
+class JTPlugin : public QObject, public ViewerPluginInterface {
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID ViewerPluginInterface_iid FILE "../bin/plugin.json")
+    Q_INTERFACES(ViewerPluginInterface)
+public:
+    ViewerBase* createViewer(QWidget* parent = nullptr) override
+    {
+        return new JsonTreeViewer(parent);
+    }
 };

@@ -12,7 +12,6 @@
 #include "jsontreeview.h"
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
-// TODO: threading?
 
 JsonTreeViewer::JsonTreeViewer(QWidget *parent)
     : ViewerBase(parent), m_btn_text_view(nullptr), m_view(nullptr)
