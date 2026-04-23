@@ -10,7 +10,7 @@
 
 #include "jsontreemodel.h"
 #include "jsontreeview.h"
-#include "seer/viewer_helper.h"
+#include "seer/viewerhelper.h"
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
 
@@ -56,8 +56,8 @@ void JsonTreeViewer::initTopWnd()
 
 QSize JsonTreeViewer::getContentSize() const
 {
-    const auto sz_def = m_d->d->dpr * QSize{600, 800};
-    auto cmd          = property(g_property_key_cmd).toStringList();
+    const auto sz_def = options()->dpr() * QSize{600, 800};
+    auto cmd          = options()->property(ViewOptionsKeys::kKeyPluginCmd).toStringList();
     if (!cmd.isEmpty()) {
         auto parsed = seer::parseViewerSizeFromConfig(cmd);
         qprintt << "getContentSize: parsed" << parsed << cmd;
@@ -70,8 +70,6 @@ QSize JsonTreeViewer::getContentSize() const
 
 void JsonTreeViewer::updateDPR(qreal r)
 {
-    m_d->d->dpr = r;
-
     layout()->setSpacing(6 * r);
     auto font = qApp->font();
     font.setPixelSize(12 * r);
@@ -102,7 +100,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout *lay_content, QHBoxLayout *lay_ctrlbar)
     initTopWnd();
     lay_content->addWidget(m_top.wnd_bg);
     JsonTreeModel *m = new JsonTreeModel(this);
-    if (!m->load(m_d->d->path)) {
+    if (!m->load(options()->path())) {
         emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
         return;
     }
@@ -129,8 +127,8 @@ void JsonTreeViewer::loadImpl(QBoxLayout *lay_content, QHBoxLayout *lay_ctrlbar)
                 &JsonTreeViewer::onTextViewBtnClicked);
     }
 
-    updateDPR(m_d->d->dpr);
-    updateTheme(m_d->d->theme);
+    updateDPR(options()->dpr());
+    updateTheme(options()->theme());
 
     emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
 }

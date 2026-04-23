@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileDialog>
 #include <QString>
 
 #include "jsontreeviewer.h"
@@ -8,24 +9,34 @@
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
+
+    QString path;
+    if (argc > 1) {
+        path = QString::fromLocal8Bit(argv[1]);
+    }
+    else {
+        path = QFileDialog::getOpenFileName(nullptr, "Open JSON", {},
+                                            "JSON Files (*.json)");
+    }
+    if (path.isEmpty()) {
+        return 0;
+    }
+
     QElapsedTimer et;
     et.start();
     JsonTreeViewer viewer;
 
-    auto p    = std::make_unique<ViewOptions>();
-    p->d->dpr = 1;
-    // p->d->path     = "D:/1.json";
-    p->d->path = "D:/c.json";
-    p->d->path = "D:/bug - Copy.json";
-    // p->d->path = "C:/d/2.json";
-    if (!QFile::exists(p->d->path)) {
-        qDebug() << "file not found" << p->d->path;
-        return -1;
-    }
-    p->d->theme = 1;
-    p->d->type  = viewer.name();
-    viewer.setWindowTitle(p->d->path);
-    viewer.load(nullptr, std::move(p));
+    ViewOptionsPrivate d;
+    d.dpr         = 1;
+    d.path        = path;
+    d.theme       = 1;
+    d.viewer_type = viewer.name();
+
+    ViewOptions opts;
+    opts.d_ptr = &d;
+
+    viewer.setWindowTitle(d.path);
+    viewer.load(nullptr, &opts);
     qDebug() << "load" << et.restart() << "ms";
     viewer.resize(viewer.getContentSize());
     viewer.show();

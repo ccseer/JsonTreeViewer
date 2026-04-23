@@ -55,3 +55,6 @@ simdjson/*
 JsonTreeViewer.pro.user*
 .vscode
 *.dll
+CMakePresets.json
+CMakeUserPresets.json
+.vs
