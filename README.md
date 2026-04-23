@@ -1,44 +1,45 @@
 # JsonTreeViewer
 
-JsonTreeViewer is a lightweight and efficient JSON viewer built using C++ and [simdjson](https://github.com/simdjson/simdjson/). It presents JSON data in a hierarchical tree structure, enabling users to navigate complex JSON files with ease.
+<!-- ## Screenshots
 
-## Features
+![](res/screenshot.png) -->
 
-- **Hierarchical Tree View**: Displays JSON data in an expandable and collapsible tree format for intuitive navigation.
-- **Performance Optimized**: Utilizes simdjson for rapid parsing, ensuring swift and efficient performance.
-- **User-Friendly Interface**: Offers an intuitive interface for seamless interaction with JSON data.
+JsonTreeViewer is a JSON tree viewer built with C++ and powered by [simdjson](https://github.com/simdjson/simdjson/) 4.6.3. This repository uses simdjson as its high-performance parsing engine and targets fast browsing of large and very large JSON files.
 
 ## Building and Running
 
-To build and run JsonTreeViewer:
+Requirements: Qt 6.8, CMake 3.16+.
 
 1. **Clone the Repository**
 
    ```bash
-   git clone --recursive https://github.com/ccseer/JsonTreeViewer.git
+   git clone https://github.com/ccseer/JsonTreeViewer.git
+   cd JsonTreeViewer
    ```
 
-2. **Open `JsonTreeViewer.pro`**
-   - ```bash
-        # TEMPLATE = lib
-        # CONFIG += plugin
-        # TARGET_EXT = .dll
-        SOURCES += src/test.cpp
-     ```
-   - Build as exe
-3. **Open the Project**
+2. **Build**
 
-   Open JsonTreeViewer.pro with your preferred Qt development environment.
+   ```bash
+   cmake -B build
+   cmake --build build
+   ```
 
-4. **Build and Run**
+   This produces two outputs:
+   - `jsontreeviewer.dll` — the Seer plugin
+   - `test_jsontreeviewer.exe` — standalone viewer for testing
 
-   Compile and run the project within the Qt environment.
+3. **Install the plugin**
+
+   Copy `jsontreeviewer.dll` to your Seer plugins directory.
 
 ## Seer Plugin
 
-Developed as a DLL plugin for Seer 4.0.0
+JsonTreeViewer is a file preview plugin for [Seer](https://1218.io) — a quick-look tool for Windows.
 
-### TODO:
+- Displays JSON data in an expandable hierarchical tree structure
+- Uses [simdjson](https://github.com/simdjson/simdjson/) 4.6.3 for high-performance JSON parsing
+- Intended for viewing large and very large JSON files inside Seer
+- Supports filtering and searching within JSON data
+- Built as a native DLL plugin for Seer 4.0.0+
 
-- expand path
-- threading?
+Visit [1218.io](https://1218.io) to download Seer and learn more about the plugin ecosystem.
