@@ -44,6 +44,14 @@ public:
     bool canFetchMore(const QModelIndex& parent) const override;
     void fetchMore(const QModelIndex& parent) override;
 
+    // Copy operations
+    QString getKey(const QModelIndex& index) const;
+    QString getValue(const QModelIndex& index) const;
+    QString getPath(const QModelIndex& index) const;
+    QString getSubtree(const QModelIndex& index,
+                       bool* success     = nullptr,
+                       QString* errorMsg = nullptr) const;
+
 private:
     JsonTreeItem* getItem(const QModelIndex& index) const;
     QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item);

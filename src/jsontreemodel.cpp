@@ -2,6 +2,7 @@
 
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QStringBuilder>
 
 #include "jsonnode.h"
@@ -396,4 +397,115 @@ bool TreeFilterProxyModel::filterAcceptsRow(int row,
         }
     }
     return false;
+}
+
+// Copy operations implementation
+QString JsonTreeModel::getKey(const QModelIndex& index) const
+{
+    if (!index.isValid()) {
+        return QString();
+    }
+
+    JsonTreeItem* item = getItem(index);
+    return item ? item->key : QString();
+}
+
+QString JsonTreeModel::getValue(const QModelIndex& index) const
+{
+    if (!index.isValid()) {
+        return QString();
+    }
+
+    JsonTreeItem* item = getItem(index);
+    return item ? item->value : QString();
+}
+
+QString JsonTreeModel::getPath(const QModelIndex& index) const
+{
+    if (!index.isValid()) {
+        return QString();
+    }
+
+    JsonTreeItem* item = getItem(index);
+    return item ? item->pointer : QString();
+}
+
+QString JsonTreeModel::getSubtree(const QModelIndex& index,
+                                  bool* success,
+                                  QString* errorMsg) const
+{
+    if (success)
+        *success = false;
+
+    if (!index.isValid()) {
+        if (errorMsg)
+            *errorMsg = "Invalid index";
+        return QString();
+    }
+
+    JsonTreeItem* item = getItem(index);
+    if (!item) {
+        if (errorMsg)
+            *errorMsg = "Invalid item";
+        return QString();
+    }
+
+    if (item->is_virtual_page) {
+        if (errorMsg)
+            *errorMsg = "Cannot copy a page node. Expand a real item instead.";
+        return QString();
+    }
+
+    // Check size limit first (applies to both scalar and container types)
+    constexpr quint64 MAX_SUBTREE_SIZE = 10 * 1024 * 1024;  // 10 MB limit
+
+    if (item->byte_length > MAX_SUBTREE_SIZE) {
+        if (errorMsg) {
+            *errorMsg
+                = QString(
+                      "Subtree too large (%1 MB). Maximum allowed is 10 MB.")
+                      .arg(item->byte_length / (1024.0 * 1024.0), 0, 'f', 2);
+        }
+        return QString();
+    }
+
+    // Check if this is a scalar value (no children)
+    if (!item->has_children) {
+        if (success)
+            *success = true;
+        return item->value;
+    }
+
+    if (!m_strategy) {
+        if (errorMsg)
+            *errorMsg = "No strategy loaded";
+        return QString();
+    }
+
+    const char* dataPtr = m_strategy->dataPtr();
+    if (!dataPtr) {
+        if (errorMsg)
+            *errorMsg = "Cannot access data";
+        return QString();
+    }
+
+    const char* subtree_start = dataPtr + item->byte_offset;
+    size_t chunk              = std::min<size_t>(item->byte_length,
+                                                 m_strategy->dataSize() - item->byte_offset);
+
+    QByteArray jsonData(subtree_start, chunk);
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(jsonData, &parseError);
+
+    if (doc.isNull()) {
+        if (errorMsg)
+            *errorMsg = QString("JSON parse error at offset %1: %2")
+                            .arg(parseError.offset)
+                            .arg(parseError.errorString());
+        return QString();
+    }
+
+    if (success)
+        *success = true;
+    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
 }

@@ -67,3 +67,35 @@ add_test(NAME PagingTests COMMAND test_paging)
 set_tests_properties(PagingTests PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+# Copy operations test executable
+add_executable(test_copy
+    test_copy.cpp
+    ../src/jsontreemodel.cpp
+    ../src/jsonnode.h
+    ../src/strategies/jsonstrategy.cpp
+    ../src/strategies/smallfilestrategy.cpp
+    ../src/strategies/mediumfilestrategy.cpp
+    ../src/strategies/largefilestrategy.cpp
+    ../src/strategies/extremefilestrategy.cpp
+    ../src/memorymappedfile.cpp
+)
+
+target_include_directories(test_copy PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+)
+
+target_link_libraries(test_copy PRIVATE
+    simdjson_static
+    Qt6::Core
+    Qt6::Test
+)
+
+# Add copy test
+add_test(NAME CopyTests COMMAND test_copy)
+
+set_tests_properties(CopyTests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+

@@ -9,13 +9,14 @@ from pathlib import Path
 
 # --- Configuration ---
 # Default build directory for quick execution
-DEFAULT_BUILD_DIR = r"C:\Users\corey\Dev\build_output\JsonTreeViewer" 
+DEFAULT_BUILD_DIR = r"C:\Users\corey\Dev\build_output\JsonTreeViewer"
 
 # The executables and their corresponding log files.
 # If relative, they are relative to the 'tests' directory in the build output.
 TESTS_CONFIG = [
     {"exe": "test_strategies.exe", "log": "test_strategies.log"},
     {"exe": "test_paging.exe", "log": "test_paging.log"},
+    {"exe": "test_copy.exe", "log": "test_copy.log"},
 ]
 # --- End Configuration ---
 
@@ -32,6 +33,9 @@ def run_test(exe_path, log_path, args=None, cwd=None):
         result = subprocess.run(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd
         )
+
+        status_msg = "normally" if result.returncode == 0 else f"with error (code: {result.returncode})"
+        print(f"Finished {exe_path.name} - exited {status_msg}")
 
         log_path.write_text(result.stdout, encoding="utf-8")
         return exe_path.name, result.returncode, log_path

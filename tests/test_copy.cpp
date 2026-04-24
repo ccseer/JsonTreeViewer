@@ -1,0 +1,284 @@
+#include <QCoreApplication>
+#include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTest>
+
+#include "../src/jsonnode.h"
+#include "../src/jsontreemodel.h"
+
+class TestCopy : public QObject {
+    Q_OBJECT
+
+private slots:
+    void initTestCase();
+    void cleanupTestCase();
+
+    // Copy operations tests
+    void testCopyKey();
+    void testCopyValue();
+    void testCopyPath();
+    void testCopySubtreeScalar();
+    void testCopySubtreeSmallObject();
+    void testCopySubtreeSizeLimit();
+    void testCopySubtreeInvalidIndex();
+
+private:
+    QString testDir;
+    JsonTreeModel* model = nullptr;
+
+    void createTestFile();
+};
+
+void TestCopy::initTestCase()
+{
+    testDir = QDir::tempPath() + "/jsontreeviewer_copy_tests/";
+    QDir dir;
+    if (!dir.exists(testDir)) {
+        dir.mkpath(testDir);
+    }
+
+    qDebug() << "Test directory:" << testDir;
+    createTestFile();
+}
+
+void TestCopy::cleanupTestCase()
+{
+    if (model) {
+        delete model;
+        model = nullptr;
+    }
+
+    QDir dir(testDir);
+    dir.removeRecursively();
+}
+
+void TestCopy::createTestFile()
+{
+    // Create a test JSON file
+    QJsonObject nested;
+    nested["inner_key"] = "inner_value";
+    nested["number"] = 42;
+
+    QJsonObject root;
+    root["name"] = "test_item";
+    root["value"] = 123;
+    root["nested"] = nested;
+    root["flag"] = true;
+
+    QJsonDocument doc(root);
+    QFile file(testDir + "test.json");
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(doc.toJson(QJsonDocument::Compact));
+        file.close();
+    }
+}
+
+void TestCopy::testCopyKey()
+{
+    qDebug() << "\n=== Test: Copy Key ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QString path = testDir + "test.json";
+    QVERIFY(model->load(path));
+
+    // Get first child (should be "name")
+    QModelIndex firstChild = model->index(0, 0);
+    QVERIFY(firstChild.isValid());
+
+    QString key = model->getKey(firstChild);
+    qDebug() << "Copied key:" << key;
+
+    QVERIFY(!key.isEmpty());
+    // The key should be one of the root object's keys
+    QVERIFY(key == "name" || key == "value" || key == "nested" || key == "flag");
+}
+
+void TestCopy::testCopyValue()
+{
+    qDebug() << "\n=== Test: Copy Value ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QString path = testDir + "test.json";
+    QVERIFY(model->load(path));
+
+    // Find "name" field
+    QModelIndex nameIndex;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QModelIndex idx = model->index(i, 0);
+        if (model->getKey(idx) == "name") {
+            nameIndex = idx;
+            break;
+        }
+    }
+
+    QVERIFY(nameIndex.isValid());
+
+    QString value = model->getValue(nameIndex);
+    qDebug() << "Copied value:" << value;
+
+    QCOMPARE(value, QString("test_item"));
+}
+
+void TestCopy::testCopyPath()
+{
+    qDebug() << "\n=== Test: Copy Path (JSON Pointer) ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QString path = testDir + "test.json";
+    QVERIFY(model->load(path));
+
+    // Get first child
+    QModelIndex firstChild = model->index(0, 0);
+    QVERIFY(firstChild.isValid());
+
+    QString jsonPath = model->getPath(firstChild);
+    qDebug() << "Copied path:" << jsonPath;
+
+    QVERIFY(!jsonPath.isEmpty());
+    // Path should start with /
+    QVERIFY(jsonPath.startsWith("/"));
+}
+
+void TestCopy::testCopySubtreeScalar()
+{
+    qDebug() << "\n=== Test: Copy Subtree (Scalar) ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QString path = testDir + "test.json";
+    QVERIFY(model->load(path));
+
+    // Find "value" field (should be 123)
+    QModelIndex valueIndex;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QModelIndex idx = model->index(i, 0);
+        if (model->getKey(idx) == "value") {
+            valueIndex = idx;
+            break;
+        }
+    }
+
+    QVERIFY(valueIndex.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    QString subtree = model->getSubtree(valueIndex, &success, &errorMsg);
+
+    qDebug() << "Subtree:" << subtree;
+    qDebug() << "Success:" << success;
+    qDebug() << "Error:" << errorMsg;
+
+    QVERIFY(success);
+    QCOMPARE(subtree, QString("123"));
+}
+
+void TestCopy::testCopySubtreeSmallObject()
+{
+    qDebug() << "\n=== Test: Copy Subtree (Small Object) ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QString path = testDir + "test.json";
+    QVERIFY(model->load(path));
+
+    // Find "nested" object
+    QModelIndex nestedIndex;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QModelIndex idx = model->index(i, 0);
+        if (model->getKey(idx) == "nested") {
+            nestedIndex = idx;
+            break;
+        }
+    }
+
+    QVERIFY(nestedIndex.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    QString subtree = model->getSubtree(nestedIndex, &success, &errorMsg);
+
+    qDebug() << "Subtree:" << subtree;
+    qDebug() << "Success:" << success;
+
+    QVERIFY(success);
+    QVERIFY(!subtree.isEmpty());
+    // Should contain the nested object's content
+    QVERIFY(subtree.contains("inner_key") || subtree.contains("inner_value"));
+}
+
+void TestCopy::testCopySubtreeSizeLimit()
+{
+    qDebug() << "\n=== Test: Copy Subtree Size Limit ===";
+
+    // Create a large file (> 10 MB)
+    QString largePath = testDir + "large.json";
+    QFile file(largePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write("{\"data\":\"");
+        // Write 11 MB of data
+        QByteArray padding(11 * 1024 * 1024, 'x');
+        file.write(padding);
+        file.write("\"}");
+        file.close();
+    }
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QVERIFY(model->load(largePath));
+
+    // Try to copy the root (which is > 10 MB)
+    QModelIndex rootChild = model->index(0, 0);
+    QVERIFY(rootChild.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    QString subtree = model->getSubtree(rootChild, &success, &errorMsg);
+
+    qDebug() << "Success:" << success;
+    qDebug() << "Error:" << errorMsg;
+
+    // Should fail due to size limit
+    QVERIFY(!success);
+    QVERIFY(!errorMsg.isEmpty());
+    QVERIFY(errorMsg.contains("too large") || errorMsg.contains("Maximum"));
+}
+
+void TestCopy::testCopySubtreeInvalidIndex()
+{
+    qDebug() << "\n=== Test: Copy Subtree Invalid Index ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+
+    QString path = testDir + "test.json";
+    QVERIFY(model->load(path));
+
+    // Try to copy with invalid index
+    QModelIndex invalidIndex;
+    QVERIFY(!invalidIndex.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    QString subtree = model->getSubtree(invalidIndex, &success, &errorMsg);
+
+    qDebug() << "Success:" << success;
+    qDebug() << "Error:" << errorMsg;
+
+    QVERIFY(!success);
+    QVERIFY(!errorMsg.isEmpty());
+}
+
+QTEST_MAIN(TestCopy)
+#include "test_copy.moc"

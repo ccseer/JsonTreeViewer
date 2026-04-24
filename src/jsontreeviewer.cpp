@@ -1,9 +1,11 @@
 #include "jsontreeviewer.h"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QDateTime>
 #include <QFile>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QTimer>
@@ -118,6 +120,45 @@ void JsonTreeViewer::loadImpl(QBoxLayout *lay_content, QHBoxLayout *lay_ctrlbar)
     m_view = new JsonTreeView(this);
     m_view->setModel(proxy_model);
     lay_content->addWidget(m_view);
+
+    // Connect copy signals
+    connect(m_view, &JsonTreeView::copyKeyRequested, this, [this, m](const QModelIndex& proxyIndex) {
+        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+        if (!proxy) return;
+        QString key = m->getKey(proxy->mapToSource(proxyIndex));
+        if (!key.isEmpty())
+            QApplication::clipboard()->setText(key);
+    });
+
+    connect(m_view, &JsonTreeView::copyValueRequested, this, [this, m](const QModelIndex& proxyIndex) {
+        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+        if (!proxy) return;
+        QString value = m->getValue(proxy->mapToSource(proxyIndex));
+        if (!value.isEmpty())
+            QApplication::clipboard()->setText(value);
+    });
+
+    connect(m_view, &JsonTreeView::copyPathRequested, this, [this, m](const QModelIndex& proxyIndex) {
+        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+        if (!proxy) return;
+        QString path = m->getPath(proxy->mapToSource(proxyIndex));
+        if (!path.isEmpty())
+            QApplication::clipboard()->setText(path);
+    });
+
+    connect(m_view, &JsonTreeView::copySubtreeRequested, this, [this, m](const QModelIndex& proxyIndex) {
+        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+        if (!proxy) return;
+        bool success = false;
+        QString errorMsg;
+        QString subtree = m->getSubtree(proxy->mapToSource(proxyIndex), &success, &errorMsg);
+
+        if (success) {
+            QApplication::clipboard()->setText(subtree);
+        } else {
+            QMessageBox::warning(this, tr("Copy Subtree Failed"), errorMsg);
+        }
+    });
 
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();

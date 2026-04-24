@@ -79,15 +79,24 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                     break;
 
                 auto fv        = field.value().value();
-                auto raw       = fv.raw_json_token();
-                size_t abs_off = (raw.data() - parse_ptr) + base_off;
-                size_t len     = raw.size();
+                auto raw_tok   = fv.raw_json_token();
+                size_t abs_off = (raw_tok.data() - parse_ptr) + base_off;
+                char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
+                size_t len;
+                if (first_ch == '{' || first_ch == '[') {
+                    auto raw_res = fv.raw_json();
+                    len          = raw_res.error() ? raw_tok.size()
+                                                   : raw_res.value_unsafe().size();
+                }
+                else {
+                    len = raw_tok.size();
+                }
+                auto [vt, vp] = typeAndPreviewFromRaw(base_ptr, abs_off, len);
 
                 std::string_view key = field.unescaped_key();
                 QString key_str = QString::fromUtf8(key.data(), key.size());
                 QString esc_key = key_str;
                 esc_key.replace("~", "~0").replace("/", "~1");
-                auto [vt, vp] = typeAndPreviewFromRaw(base_ptr, abs_off, len);
 
                 auto* item = new JsonTreeItem(
                     key_str, parent_item->pointer + "/" + esc_key, vt, vp,
@@ -120,9 +129,18 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                     break;
 
                 auto ev        = element.value();
-                auto raw       = ev.raw_json_token();
-                size_t abs_off = (raw.data() - parse_ptr) + base_off;
-                size_t len     = raw.size();
+                auto raw_tok   = ev.raw_json_token();
+                size_t abs_off = (raw_tok.data() - parse_ptr) + base_off;
+                char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
+                size_t len;
+                if (first_ch == '{' || first_ch == '[') {
+                    auto raw_res = ev.raw_json();
+                    len          = raw_res.error() ? raw_tok.size()
+                                                   : raw_res.value_unsafe().size();
+                }
+                else {
+                    len = raw_tok.size();
+                }
 
                 auto [vt, vp]   = typeAndPreviewFromRaw(base_ptr, abs_off, len);
                 QString idx_str = QString::number(idx);
@@ -263,10 +281,20 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                         }
                         if (range_mode && idx > end)
                             break;
-                        auto fv              = field.value().value();
-                        auto raw             = fv.raw_json_token();
-                        size_t abs_off       = (raw.data() - base_ptr);
-                        size_t len           = raw.size();
+                        auto fv        = field.value().value();
+                        auto raw_tok   = fv.raw_json_token();
+                        size_t abs_off = (raw_tok.data() - base_ptr);
+                        char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
+                        size_t len;
+                        if (first_ch == '{' || first_ch == '[') {
+                            auto raw_res = fv.raw_json();
+                            len          = raw_res.error()
+                                               ? raw_tok.size()
+                                               : raw_res.value_unsafe().size();
+                        }
+                        else {
+                            len = raw_tok.size();
+                        }
                         std::string_view key = field.unescaped_key();
                         QString key_str
                             = QString::fromUtf8(key.data(), key.size());
@@ -311,9 +339,19 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                             if (range_mode && idx > end)
                                 break;
                             auto ev        = element.value();
-                            auto raw       = ev.raw_json_token();
-                            size_t abs_off = (raw.data() - base_ptr);
-                            size_t len     = raw.size();
+                            auto raw_tok   = ev.raw_json_token();
+                            size_t abs_off = (raw_tok.data() - base_ptr);
+                            char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
+                            size_t len;
+                            if (first_ch == '{' || first_ch == '[') {
+                                auto raw_res = ev.raw_json();
+                                len          = raw_res.error()
+                                                   ? raw_tok.size()
+                                                   : raw_res.value_unsafe().size();
+                            }
+                            else {
+                                len = raw_tok.size();
+                            }
                             auto [vt, vp]
                                 = typeAndPreviewFromRaw(base_ptr, abs_off, len);
                             QString idx_str = QString::number(idx);
