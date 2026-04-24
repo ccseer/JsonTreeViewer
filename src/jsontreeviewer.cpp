@@ -4,6 +4,7 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QFile>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
@@ -89,6 +90,23 @@ void JsonTreeViewer::updateDPR(qreal r)
     }
     m_view->upadteDPR(r);
 
+    if (m_status_bar) {
+        auto sbFont = qApp->font();
+        sbFont.setPixelSize(11 * r);
+        m_status_bar->setFont(sbFont);
+        if (auto parent = qobject_cast<QWidget*>(m_status_bar->parent())) {
+            parent->setFixedHeight(20 * r);
+            parent->layout()->setContentsMargins(6 * r, 0, 6 * r, 0);
+        }
+    }
+
+    if (m_warning_icon) {
+        auto warnFont = qApp->font();
+        warnFont.setPixelSize(13 * r);
+        warnFont.setBold(true);
+        m_warning_icon->setFont(warnFont);
+    }
+
     if (m_btn_text_view) {
         m_btn_text_view->setFixedSize(
             m_btn_text_view->fontMetrics().horizontalAdvance(
@@ -101,6 +119,7 @@ void JsonTreeViewer::updateDPR(qreal r)
 void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 {
     initTopWnd();
+    lay_content->setSpacing(0);
     lay_content->addWidget(m_top.wnd_bg);
     JsonTreeModel* m = new JsonTreeModel(this);
     if (!m->load(options()->path())) {
@@ -121,6 +140,63 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     m_view->setCopyActions(m->supportedActions());
     m_view->setModel(proxy_model);
     lay_content->addWidget(m_view);
+
+    // Status bar with warning icon
+    QWidget* statusBarWidget  = new QWidget(this);
+    QHBoxLayout* statusLayout = new QHBoxLayout(statusBarWidget);
+    statusLayout->setContentsMargins(0, 0, 0, 0);
+    statusLayout->setSpacing(0);
+
+    m_status_bar = new QLabel(this);
+    m_status_bar->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_status_bar->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    statusLayout->addWidget(m_status_bar, 1);
+
+    // Warning icon for large/extreme files
+    using FM = JsonTreeModel::FileMode;
+    if (m->fileMode() == FM::Large || m->fileMode() == FM::Extreme) {
+        m_warning_icon = new QLabel(this);
+        m_warning_icon->setText(" ⚠ ");
+        m_warning_icon->setAlignment(Qt::AlignCenter);
+
+        QStringList warnings;
+        if (m->fileMode() == FM::Extreme) {
+            warnings << tr("Extreme file (>1 GB):")
+                     << tr("• Only Key/Value copy supported")
+                     << tr("• Path and Subtree operations disabled");
+        }
+        else {
+            warnings << tr("Large file (>100 MB):")
+                     << tr("• Path copy supported")
+                     << tr("• Subtree and Key:Value copy disabled");
+        }
+        m_warning_icon->setToolTip(warnings.join("\n"));
+        statusLayout->addWidget(m_warning_icon, 0);
+    }
+
+    lay_content->addWidget(statusBarWidget);
+
+    connect(
+        m_view->selectionModel(), &QItemSelectionModel::currentChanged, this,
+        [this, m, proxy_model](const QModelIndex& current, const QModelIndex&) {
+            if (!current.isValid()) {
+                m_status_bar->clear();
+                return;
+            }
+            QModelIndex src = proxy_model->mapToSource(current);
+            QString path    = m->getPath(src);
+            QString key     = m->getKey(src);
+            QString val     = m->getValue(src);
+
+            QString text = path.isEmpty() ? key : path;
+            if (!val.isEmpty()) {
+                constexpr int MAX_VAL = 80;
+                if (val.length() > MAX_VAL)
+                    val = val.left(MAX_VAL) + "...";
+                text += "  =  " + val;
+            }
+            m_status_bar->setText(text);
+        });
 
     // Connect copy signals
     connect(m_view, &JsonTreeView::copyKeyRequested, this,

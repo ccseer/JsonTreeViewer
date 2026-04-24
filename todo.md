@@ -12,11 +12,11 @@
 - [x] Lazy loading with fetchMore
 
 ### v1.2 (Next - Target Q2 2026)
-- [ ] File size detection and large-file mode
-- [ ] Large array optimization with paging
-- [ ] JSON Pointer display and navigation
-- [ ] Copy actions and subtree export
-- [ ] Byte offset caching
+- [x] File size detection and large-file mode
+- [x] Large array optimization with paging
+- [x] JSON Pointer display and navigation
+- [x] Copy actions and subtree export
+- [x] Byte offset caching
 
 ### v1.3 (Future)
 - [ ] Memory mapping
@@ -32,47 +32,47 @@
 
 ## Design Principles
 
-- [ ] Use `simdjson::ondemand` as the primary parsing model.
-- [ ] Keep tree loading lazy and pointer-driven.
-- [ ] Prefer bounded operations over full-document materialization.
-- [ ] Treat large-file support as “responsive partial exploration”, not “expand everything safely”.
+- [x] Use `simdjson::ondemand` as the primary parsing model.
+- [x] Keep tree loading lazy and pointer-driven.
+- [x] Prefer bounded operations over full-document materialization.
+- [x] Treat large-file support as “responsive partial exploration”, not “expand everything safely”.
 - [ ] Only introduce threading after bounded loading rules and performance hotspots are clear.
-- [ ] Use byte offset caching to avoid re-parsing from file start.
+- [x] Use byte offset caching to avoid re-parsing from file start.
 - [ ] Monitor memory pressure and adapt behavior accordingly.
 
 ## v1.2 Core Usability
 
 ### 0. File size detection and large-file mode (CRITICAL)
 
-- [ ] Detect file size before loading using QFileInfo.
-- [ ] Define thresholds: small (<10MB), medium (10-100MB), large (>100MB), extreme (>1GB).
-- [ ] Enable large-file mode automatically for files >100MB.
-- [ ] In large-file mode:
-  - [ ] Limit initial expand depth to 2 levels.
-  - [ ] Limit array preview to first 100 elements by default.
-  - [ ] Show warning banner: "Large file detected. Showing limited preview."
-  - [ ] Disable or warn on dangerous operations (Expand All, Copy Subtree on root).
+- [x] Detect file size before loading using QFileInfo.
+- [x] Define thresholds: small (<10MB), medium (10-100MB), large (>100MB), extreme (>1GB).
+- [x] Enable large-file mode automatically for files >100MB.
+- [x] In large-file mode:
+  - [x] Limit initial expand depth to 2 levels.
+  - [x] Limit array preview to first 100 elements by default.
+  - [x] Show warning banner: "Large file detected. Showing limited preview."
+  - [x] Disable or warn on dangerous operations (Expand All, Copy Subtree on root).
 - [ ] Add user preference to override thresholds (via config file or environment variable).
 
 ### 1. Byte offset caching (PERFORMANCE CRITICAL)
 
-- [ ] Add `size_t byte_offset` field to JsonTreeItem.
-- [ ] Use `raw_json_token()` to capture byte position during node creation.
-- [ ] Store offset alongside pointer for each node.
-- [ ] Store byte_length for subtree size estimation.
-- [ ] Optimize from O(File Size) to O(1) for deep node expansion.
-- [ ] Test with GB-sized files to verify no "freeze" on deep node clicks.
+- [x] Add `size_t byte_offset` field to JsonTreeItem.
+- [x] Use `raw_json_token()` to capture byte position during node creation.
+- [x] Store offset alongside pointer for each node.
+- [x] Store byte_length for subtree size estimation.
+- [x] Optimize from O(File Size) to O(1) for deep node expansion.
+- [x] Test with GB-sized files to verify no "freeze" on deep node clicks.
 
 ### 2. JSON Pointer path display
 
-- [ ] Add a status bar at the bottom of the viewer.
-- [ ] Show the currently selected node's JSON Pointer in the status bar (left side).
-- [ ] Format: `Path: /store/book/0/title` or `Path: (root)` when nothing selected.
-- [ ] Make the path label selectable to copy to clipboard.
-- [ ] Update the path display when tree selection changes.
-- [ ] Clear or reset the path display when no node is selected.
-- [ ] Reuse the existing per-node `pointer` as the source of truth.
-- [ ] Show byte size alongside path in stats section.
+- [x] Add a status bar at the bottom of the viewer.
+- [x] Show the currently selected node's JSON Pointer in the status bar (left side).
+- [x] Format: `Path: /store/book/0/title` or `Path: (root)` when nothing selected.
+- [x] Make the path label selectable to copy to clipboard.
+- [x] Update the path display when tree selection changes.
+- [x] Clear or reset the path display when no node is selected.
+- [x] Reuse the existing per-node `pointer` as the source of truth.
+- [x] Show byte size alongside path in stats section.
 
 ### 2.5. Status bar with statistics and file info
 
@@ -92,14 +92,14 @@
 
 ### 2.6. Context menu for tree nodes
 
-- [ ] Add context menu to JsonTreeView (override contextMenuEvent).
-- [ ] Menu items:
-  - [ ] Copy Key (Ctrl+Shift+K)
-  - [ ] Copy Value (Ctrl+Shift+V)
-  - [ ] Copy Path (Ctrl+Shift+P) - JSON Pointer format
+- [x] Add context menu to JsonTreeView (override contextMenuEvent).
+- [x] Menu items:
+  - [x] Copy Key (Ctrl+Shift+K)
+  - [x] Copy Value (Ctrl+Shift+V)
+  - [x] Copy Path (Ctrl+Shift+P) - JSON Pointer format
   - [ ] Copy Dot Path - e.g., `store.book[0].title`
-  - [ ] Separator
-  - [ ] Copy Subtree (Ctrl+Shift+C)
+  - [x] Separator
+  - [x] Copy Subtree (Ctrl+Shift+C)
   - [ ] Export Selection to File...
   - [ ] Separator
   - [ ] Expand to Level...
@@ -107,8 +107,8 @@
   - [ ] Separator (conditional)
   - [ ] Open URL (only for http/https strings)
   - [ ] Copy as ISO 8601 (only for detected timestamps)
-- [ ] Disable menu items when not applicable (e.g., "Copy Key" on root).
-- [ ] Use QClipboard for copy operations.
+- [x] Disable menu items when not applicable (e.g., "Copy Key" on root).
+- [x] Use QClipboard for copy operations.
 
 ### 2.7. Enhanced top toolbar
 
@@ -116,9 +116,9 @@
   - [ ] Options: All, Key, Value, Path, Type.
   - [ ] Default to "All" (current behavior).
   - [ ] Update filter logic based on selection (currently uses prefix parsing).
-- [ ] Add large-file warning banner (QLabel with warning icon).
-  - [ ] Show when large-file mode is active.
-  - [ ] Text: `⚠️ Large file (500 MB). Limited preview enabled.`
+- [x] Add large-file warning banner (QLabel with warning icon).
+  - [x] Show when large-file mode is active.
+  - [x] Text: `⚠️ Large file (500 MB). Limited preview enabled.`
   - [ ] Make dismissible or persistent based on preference.
 - [ ] Consider adding "Go to Path" input field (QLineEdit).
   - [ ] Placeholder: `Enter JSON Pointer (e.g., /store/book/0)`.
@@ -127,20 +127,20 @@
 
 ### 3. Copy actions
 
-- [ ] Add a context menu on tree nodes.
-- [ ] Add `Copy Key`.
-- [ ] Add `Copy Value`.
-- [ ] Add `Copy Path` (JSON Pointer format).
+- [x] Add a context menu on tree nodes.
+- [x] Add `Copy Key`.
+- [x] Add `Copy Value`.
+- [x] Add `Copy Path` (JSON Pointer format).
 - [ ] Consider adding `Copy Dot Path` such as `store.book[0].title`.
-- [ ] Keep these actions O(1) or close to it whenever possible.
+- [x] Keep these actions O(1) or close to it whenever possible.
 
 ### 4. Copy Subtree and Export Selection
 
-- [ ] Add `Copy Subtree` for object and array nodes.
-- [ ] Serialize the selected subtree as formatted JSON.
-- [ ] Gate this action for oversized subtrees (e.g., >10MB or >10,000 nodes).
-- [ ] Show a warning or refuse the operation when the subtree is too large.
-- [ ] Use the selected node's pointer (or byte offset) as the source of truth for subtree export.
+- [x] Add `Copy Subtree` for object and array nodes.
+- [x] Serialize the selected subtree as formatted JSON.
+- [x] Gate this action for oversized subtrees (e.g., >10MB or >10,000 nodes).
+- [x] Show a warning or refuse the operation when the subtree is too large.
+- [x] Use the selected node's pointer (or byte offset) as the source of truth for subtree export.
 - [ ] Add `Export Selection to File...` action in context menu.
 - [ ] Allow saving selected subtree directly to a .json file.
 - [ ] Useful for extracting specific fragments from multi-GB log files.
@@ -177,11 +177,11 @@
 
 ### 7. Large array optimization
 
-- [ ] Show array summary text like `[Array (12,345 items)]`.
-- [ ] Avoid eagerly materializing huge arrays.
-- [ ] Add chunked or paged loading for large arrays.
-- [ ] Keep expanding a large array predictable and bounded.
-- [ ] Consider range nodes such as `0-999`, `1000-1999` if needed.
+- [x] Show array summary text like `[Array (12,345 items)]`.
+- [x] Avoid eagerly materializing huge arrays.
+- [x] Add chunked or paged loading for large arrays.
+- [x] Keep expanding a large array predictable and bounded.
+- [x] Consider range nodes such as `0-999`, `1000-1999` if needed.
 
 ### 8. Large object optimization
 
@@ -220,14 +220,14 @@
 
 ### 13. Memory-mapped file loading
 
-- [ ] Replace `padded_string::load()` with memory-mapped approach for large files.
-- [ ] Use platform-specific mmap (Windows: CreateFileMapping/MapViewOfFile).
-- [ ] Wrap mmap in RAII helper for safe cleanup.
-- [ ] Create `padded_string_view` from mapped memory.
-- [ ] Handle mapping failures gracefully (fall back to load for small files).
-- [ ] Test with files >4GB on 64-bit systems.
-- [ ] Document memory usage characteristics.
-- [ ] Only enable for files >100MB to avoid overhead on small files.
+- [x] Replace `padded_string::load()` with memory-mapped approach for large files.
+- [x] Use platform-specific mmap (Windows: CreateFileMapping/MapViewOfFile).
+- [x] Wrap mmap in RAII helper for safe cleanup.
+- [x] Create `padded_string_view` from mapped memory.
+- [x] Handle mapping failures gracefully (fall back to load for small files).
+- [x] Test with files >4GB on 64-bit systems.
+- [x] Document memory usage characteristics.
+- [x] Only enable for files >100MB to avoid overhead on small files.
 
 ### 14. File statistics and analysis
 
