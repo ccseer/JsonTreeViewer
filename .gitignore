@@ -58,3 +58,4 @@ JsonTreeViewer.pro.user*
 CMakePresets.json
 CMakeUserPresets.json
 .vs
+tests/*.json

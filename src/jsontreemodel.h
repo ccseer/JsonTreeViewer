@@ -3,18 +3,29 @@
 #include <simdjson.h>
 
 #include <QSortFilterProxyModel>
+#include <memory>
 
 class JsonTreeItem;
+class JsonViewerStrategy;
 
 class JsonTreeModel : public QAbstractItemModel {
     Q_OBJECT
 public:
+    enum class FileMode {
+        Small,
+        Medium,
+        Large,
+        Extreme
+    };
+
     explicit JsonTreeModel(QObject* parent = nullptr);
     ~JsonTreeModel() override;
 
     static QString toEscaped(const QString& key);
     bool load(const QString& path);
     void loadEverything();
+
+    FileMode fileMode() const { return m_file_mode; }
     // QModelIndex navigateToPath(const QString& path);
 
     Qt::ItemFlags flags(const QModelIndex& index) const override;
@@ -37,12 +48,13 @@ public:
 
 private:
     JsonTreeItem* getItem(const QModelIndex& index) const;
-    QPair<char, QString> getTypeAndPreview(
-        simdjson::ondemand::value value) const;
-    bool hasChildNode(simdjson::ondemand::value value) const;
     QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item);
 
     JsonTreeItem* m_root_item;
+    std::unique_ptr<JsonViewerStrategy> m_strategy;
+    FileMode m_file_mode;
+
+    // Legacy members - will be removed after full strategy integration
     simdjson::ondemand::parser m_parser;
     simdjson::padded_string m_json_data;
     simdjson::ondemand::document m_doc;

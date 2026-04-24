@@ -57,7 +57,8 @@ void JsonTreeViewer::initTopWnd()
 QSize JsonTreeViewer::getContentSize() const
 {
     const auto sz_def = options()->dpr() * QSize{600, 800};
-    auto cmd          = options()->property(ViewOptionsKeys::kKeyPluginCmd).toStringList();
+    auto cmd
+        = options()->property(ViewOptionsKeys::kKeyPluginCmd).toStringList();
     if (!cmd.isEmpty()) {
         auto parsed = seer::parseViewerSizeFromConfig(cmd);
         qprintt << "getContentSize: parsed" << parsed << cmd;

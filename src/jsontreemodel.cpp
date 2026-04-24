@@ -1,13 +1,20 @@
 #include "jsontreemodel.h"
 
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QStringBuilder>
 
 #include "jsonnode.h"
+#include "logging.h"
+#include "strategies/extremefilestrategy.h"
+#include "strategies/jsonstrategy.h"
+#include "strategies/largefilestrategy.h"
+#include "strategies/mediumfilestrategy.h"
+#include "strategies/smallfilestrategy.h"
 
 using namespace simdjson;
 
-#define qprintt qDebug() << "[JsonTreeViewer]"
+#define qprintt qprint << "[Model]"
 
 namespace {
 constexpr auto g_type_obj = "Object";
@@ -55,14 +62,47 @@ JsonTreeModel::~JsonTreeModel()
 
 bool JsonTreeModel::load(const QString& path)
 {
-    if (auto e = padded_string::load(path.toUtf8().data()).get(m_json_data)) {
-        qprintt << "Failed to load file with alignment" << e;
+    // Get file size to select strategy
+    QFileInfo fileInfo(path);
+    qint64 fileSize = fileInfo.size();
+
+    qprintt << "Loading file:" << path << "Size:" << fileSize << "bytes";
+
+    // Select strategy based on file size
+    if (fileSize < StrategyThresholds::SMALL_FILE_MAX) {
+        m_strategy  = std::make_unique<SmallFileStrategy>();
+        m_file_mode = FileMode::Small;
+        qprintt << "Using SmallFileStrategy";
+    }
+    else if (fileSize < StrategyThresholds::MEDIUM_FILE_MAX) {
+        m_strategy  = std::make_unique<MediumFileStrategy>();
+        m_file_mode = FileMode::Medium;
+        qprintt << "Using MediumFileStrategy";
+    }
+    else if (fileSize < StrategyThresholds::LARGE_FILE_MAX) {
+        m_strategy  = std::make_unique<LargeFileStrategy>();
+        m_file_mode = FileMode::Large;
+        qprintt << "Using LargeFileStrategy";
+    }
+    else {
+        m_strategy  = std::make_unique<ExtremeFileStrategy>();
+        m_file_mode = FileMode::Extreme;
+        qprintt << "Using ExtremeFileStrategy";
+    }
+
+    // Load file using selected strategy
+    if (!m_strategy->load(path)) {
+        qprintt << "Strategy load failed";
         return false;
     }
 
+    // Set root item metadata
+    m_root_item->byte_offset = 0;
+    m_root_item->byte_length = m_strategy->dataSize();
+
+    // Extract first level children
     QVector<JsonTreeItem*> items;
     try {
-        m_doc = m_parser.iterate(m_json_data);
         items = extractChildren(m_root_item);
         if (items.isEmpty()) {
             qprintt << "extractChildren: empty";
@@ -76,6 +116,7 @@ bool JsonTreeModel::load(const QString& path)
 
     beginInsertRows({}, 0, items.count() - 1);
     m_root_item->children.append(items);
+    m_root_item->children_loaded = true;
     endInsertRows();
     m_root_item->has_children = !m_root_item->children.isEmpty();
     return true;
@@ -210,6 +251,7 @@ void JsonTreeModel::fetchMore(const QModelIndex& parent)
     if (insert_t > 0) {
         beginInsertRows(parent, old_t, old_t + insert_t - 1);
         item->children.append(new_items);
+        item->children_loaded = true;
         endInsertRows();
     }
 }
@@ -222,79 +264,6 @@ JsonTreeItem* JsonTreeModel::getItem(const QModelIndex& index) const
     return m_root_item;
 }
 
-QPair<char, QString> JsonTreeModel::getTypeAndPreview(
-    ondemand::value value) const
-{
-    using Type           = ondemand::json_type;
-    const auto type_char = static_cast<char>(value.type().value());
-    switch (value.type()) {
-    case Type::object: {
-        return {type_char, QString("{%1}").arg(g_type_obj)};
-    }
-    case Type::array: {
-        return {type_char, QString("[%1]").arg(g_type_arr)};
-    }
-    case Type::string: {
-        std::string_view str;
-        value.get_string().get(str);
-        return {type_char, QString::fromUtf8(str.data(), str.size())};
-    }
-    case Type::number: {
-        ondemand::number_type num_type;
-        if (value.get_number_type().get(num_type) != SUCCESS) {
-            return {type_char, "Invalid Number"};
-        }
-        QString num_str;
-        switch (num_type) {
-        case ondemand::number_type::signed_integer: {
-            int64_t num;
-            value.get_int64().get(num);
-            num_str = QString::number(num);
-            break;
-        }
-        case ondemand::number_type::unsigned_integer: {
-            uint64_t num;
-            value.get_uint64().get(num);
-            num_str = QString::number(num);
-            break;
-        }
-        case ondemand::number_type::big_integer:
-        case ondemand::number_type::floating_point_number: {
-            std::string_view raw = value.raw_json_token();
-            num_str = QString::fromUtf8(raw.data(), raw.size()).trimmed();
-            break;
-        }
-        }
-        return {type_char, num_str};
-    }
-    case Type::boolean: {
-        bool b = false;
-        value.get_bool().get(b);
-        return {type_char, b ? "true" : "false"};
-    }
-    case Type::null: {
-        return {type_char, {}};
-    }
-    }
-    return {type_char, {}};
-}
-
-bool JsonTreeModel::hasChildNode(ondemand::value value) const
-{
-    using Type = ondemand::json_type;
-
-    if (value.type() == Type::object) {
-        ondemand::object obj;
-        return !value.get_object().get(obj) && obj.begin() != obj.end();
-    }
-    else if (value.type() == Type::array) {
-        ondemand::array arr;
-        return !value.get_array().get(arr) && arr.begin() != arr.end();
-    }
-
-    return false;
-}
-
 QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
 {
     if (!parent_item || !parent_item->has_children) {
@@ -304,52 +273,12 @@ QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
         return {};
     }
 
-    ondemand::value value;
-    if (parent_item->pointer.isEmpty()) {
-        value = m_doc;
+    // Use strategy to extract children
+    if (m_strategy) {
+        return m_strategy->extractChildren(parent_item);
     }
-    else {
-        auto result = m_doc.at_pointer(parent_item->pointer.toStdString());
-        if (result.error()) {
-            qprintt << "at_pointer error:" << parent_item->pointer;
-            return {};
-        }
-        value = result.value();
-    }
-    QVector<JsonTreeItem*> items_vec;
-    ondemand::json_type type = value.type();
-    if (type == ondemand::json_type::object) {
-        ondemand::object obj = value.get_object();
-        parent_item->children.reserve(obj.count_fields());
-        for (auto field : obj) {
-            auto field_val       = field.value().value();
-            auto [val_type, val] = getTypeAndPreview(field_val);
-            std::string_view key = field.unescaped_key();
-            auto field_name      = QString::fromUtf8(key.data(), key.size());
-            auto item            = new JsonTreeItem(
-                field_name, parent_item->pointer % "/" % toEscaped(field_name),
-                val_type, val, parent_item);
-            item->has_children = hasChildNode(field_val);
-            items_vec.append(item);
-        }
-    }
-    else if (type == ondemand::json_type::array) {
-        ondemand::array arr = value.get_array();
-        parent_item->children.reserve(arr.count_elements());
-        int index = 0;
-        for (auto element : arr) {
-            auto ele_val         = element.value();
-            auto [val_type, val] = getTypeAndPreview(ele_val);
-            auto item            = new JsonTreeItem(
-                QString::number(index),
-                parent_item->pointer % "/" % QString::number(index), val_type,
-                val, parent_item);
-            item->has_children = hasChildNode(ele_val);
-            items_vec.append(item);
-            ++index;
-        }
-    }
-    return items_vec;
+
+    return {};
 }
 
 bool JsonTreeModel::hasChildren(const QModelIndex& parent) const

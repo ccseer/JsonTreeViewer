@@ -30,24 +30,40 @@ FetchContent_Declare(SeerSdk
 )
 FetchContent_MakeAvailable(SeerSdk)
 
+add_library(simdjson_static STATIC
+    simdjson/simdjson.cpp
+    simdjson/simdjson.h
+)
+
+target_include_directories(simdjson_static PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/simdjson
+)
+
 add_library(jsontreeviewer SHARED
     src/jsontreemodel.cpp
     src/jsontreeview.cpp
     src/jsontreeviewer.cpp
+    src/memorymappedfile.cpp
     src/jsonnode.h
     src/jsontreemodel.h
     src/jsontreeview.h
     src/jsontreeviewer.h
-    simdjson/simdjson.cpp
-    simdjson/simdjson.h
+    src/memorymappedfile.h
+    src/strategies/jsonstrategy.h
+    src/strategies/jsonstrategy.cpp
+    src/strategies/smallfilestrategy.h
+    src/strategies/smallfilestrategy.cpp
+    src/strategies/mediumfilestrategy.h
+    src/strategies/mediumfilestrategy.cpp
+    src/strategies/largefilestrategy.h
+    src/strategies/largefilestrategy.cpp
+    src/strategies/extremefilestrategy.h
+    src/strategies/extremefilestrategy.cpp
     ${seersdk_SOURCE_DIR}/seer/viewerbase.h
 )
 
-target_include_directories(jsontreeviewer PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/simdjson
-)
-
 target_link_libraries(jsontreeviewer PRIVATE
+    simdjson_static
     SeerSdk::SeerSdk
     Qt6::Core
     Qt6::Gui
@@ -67,8 +83,16 @@ target_compile_definitions(jsontreeviewer PRIVATE
 add_executable(test_jsontreeviewer WIN32 src/test.cpp)
 target_link_libraries(test_jsontreeviewer PRIVATE
     jsontreeviewer
+    simdjson_static
     SeerSdk::SeerSdk
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
 )
+
+# Add tests subdirectory
+option(BUILD_TESTS "Build tests" ON)
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
