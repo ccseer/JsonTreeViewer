@@ -17,6 +17,11 @@ public:
     const char* dataPtr() const override;
     size_t dataSize() const override;
     const Metrics& metrics() const override;
+    CopyActions supportedActions() const override
+    {
+        return CopyAction::Key | CopyAction::Value | CopyAction::Path
+               | CopyAction::KeyValue | CopyAction::Subtree;
+    }
 
 private:
     simdjson::padded_string m_json_data;

@@ -8,6 +8,7 @@
 
 #include "../src/jsonnode.h"
 #include "../src/jsontreemodel.h"
+#include "../src/strategies/jsonstrategy.h"
 
 class TestCopy : public QObject {
     Q_OBJECT
@@ -24,6 +25,10 @@ private slots:
     void testCopySubtreeSmallObject();
     void testCopySubtreeSizeLimit();
     void testCopySubtreeInvalidIndex();
+    void testCopyKeyValueScalar();
+    void testCopyKeyValueObject();
+    void testCopyKeyValueArrayFails();
+    void testSupportedActionsSmall();
 
 private:
     QString testDir;
@@ -278,6 +283,104 @@ void TestCopy::testCopySubtreeInvalidIndex()
 
     QVERIFY(!success);
     QVERIFY(!errorMsg.isEmpty());
+}
+
+void TestCopy::testCopyKeyValueScalar()
+{
+    qDebug() << "\n=== Test: Copy Key:Value (Scalar) ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+    QVERIFY(model->load(testDir + "test.json"));
+
+    QModelIndex nameIndex;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QModelIndex idx = model->index(i, 0);
+        if (model->getKey(idx) == "name") { nameIndex = idx; break; }
+    }
+    QVERIFY(nameIndex.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    QString kv = model->getKeyValue(nameIndex, &success, &errorMsg);
+    qDebug() << "KeyValue:" << kv;
+
+    QVERIFY(success);
+    QCOMPARE(kv, QString("\"name\": \"test_item\""));
+}
+
+void TestCopy::testCopyKeyValueObject()
+{
+    qDebug() << "\n=== Test: Copy Key:Value (Object) ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+    QVERIFY(model->load(testDir + "test.json"));
+
+    QModelIndex nestedIndex;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QModelIndex idx = model->index(i, 0);
+        if (model->getKey(idx) == "nested") { nestedIndex = idx; break; }
+    }
+    QVERIFY(nestedIndex.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    QString kv = model->getKeyValue(nestedIndex, &success, &errorMsg);
+    qDebug() << "KeyValue:" << kv;
+
+    QVERIFY(success);
+    QVERIFY(kv.startsWith("\"nested\": {"));
+    QVERIFY(kv.contains("inner_key"));
+}
+
+void TestCopy::testCopyKeyValueArrayFails()
+{
+    qDebug() << "\n=== Test: Copy Key:Value (Array node - should fail) ===";
+
+    // Build a JSON with a top-level array value
+    QString arrayPath = testDir + "array.json";
+    QFile f(arrayPath);
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write("{\"items\":[1,2,3]}");
+        f.close();
+    }
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+    QVERIFY(model->load(arrayPath));
+
+    QModelIndex arrIndex;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QModelIndex idx = model->index(i, 0);
+        if (model->getKey(idx) == "items") { arrIndex = idx; break; }
+    }
+    QVERIFY(arrIndex.isValid());
+
+    bool success = false;
+    QString errorMsg;
+    model->getKeyValue(arrIndex, &success, &errorMsg);
+    qDebug() << "Success:" << success << "Error:" << errorMsg;
+
+    QVERIFY(!success);
+    QVERIFY(!errorMsg.isEmpty());
+}
+
+void TestCopy::testSupportedActionsSmall()
+{
+    qDebug() << "\n=== Test: Supported Actions (Small file) ===";
+
+    if (model) delete model;
+    model = new JsonTreeModel(this);
+    QVERIFY(model->load(testDir + "test.json"));
+
+    auto actions = model->supportedActions();
+    using CA = JsonViewerStrategy::CopyAction;
+    QVERIFY(actions & CA::Key);
+    QVERIFY(actions & CA::Value);
+    QVERIFY(actions & CA::Path);
+    QVERIFY(actions & CA::KeyValue);
+    QVERIFY(actions & CA::Subtree);
 }
 
 QTEST_MAIN(TestCopy)

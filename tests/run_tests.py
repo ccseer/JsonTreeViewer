@@ -34,8 +34,12 @@ def run_test(exe_path, log_path, args=None, cwd=None):
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd
         )
 
-        status_msg = "normally" if result.returncode == 0 else f"with error (code: {result.returncode})"
-        print(f"Finished {exe_path.name} - exited {status_msg}")
+        status_msg = (
+            "normally"
+            if result.returncode == 0
+            else f"with error (code: {result.returncode})"
+        )
+        print(f"Finished {exe_path.name} <- exited {status_msg}")
 
         log_path.write_text(result.stdout, encoding="utf-8")
         return exe_path.name, result.returncode, log_path

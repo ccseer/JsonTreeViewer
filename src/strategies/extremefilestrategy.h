@@ -16,6 +16,10 @@ public:
     const char* dataPtr() const override;
     size_t dataSize() const override;
     const Metrics& metrics() const override;
+    CopyActions supportedActions() const override
+    {
+        return CopyAction::Key | CopyAction::Value;
+    }
 
 private:
     MemoryMappedFile m_mmap;

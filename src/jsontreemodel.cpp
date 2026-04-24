@@ -2,6 +2,7 @@
 
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QStringBuilder>
 
@@ -428,6 +429,64 @@ QString JsonTreeModel::getPath(const QModelIndex& index) const
 
     JsonTreeItem* item = getItem(index);
     return item ? item->pointer : QString();
+}
+
+QString JsonTreeModel::getKeyValue(const QModelIndex& index,
+                                   bool* success,
+                                   QString* errorMsg) const
+{
+    if (success)
+        *success = false;
+
+    if (!index.isValid()) {
+        if (errorMsg)
+            *errorMsg = "Invalid index";
+        return QString();
+    }
+
+    JsonTreeItem* item = getItem(index);
+    if (!item) {
+        if (errorMsg)
+            *errorMsg = "Invalid item";
+        return QString();
+    }
+
+    if (item->is_virtual_page) {
+        if (errorMsg)
+            *errorMsg = "Cannot copy a page node.";
+        return QString();
+    }
+
+    if (item->type == '[') {
+        if (errorMsg)
+            *errorMsg = "Copy Key:Value is not supported for array nodes.";
+        return QString();
+    }
+
+    QString valueStr;
+    if (!item->has_children) {
+        if (item->type == 's') {
+            QJsonDocument tmp(QJsonArray{item->value});
+            QByteArray arr = tmp.toJson(QJsonDocument::Compact);
+            // arr is ["value"], strip outer brackets
+            valueStr = QString::fromUtf8(arr.mid(1, arr.size() - 2));
+        } else {
+            valueStr = item->value;
+        }
+    } else {
+        QString subtreeErr;
+        bool subtreeOk = false;
+        valueStr = getSubtree(index, &subtreeOk, &subtreeErr);
+        if (!subtreeOk) {
+            if (errorMsg)
+                *errorMsg = subtreeErr;
+            return QString();
+        }
+    }
+
+    if (success)
+        *success = true;
+    return QString("\"%1\": %2").arg(item->key, valueStr);
 }
 
 QString JsonTreeModel::getSubtree(const QModelIndex& index,

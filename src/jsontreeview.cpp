@@ -4,7 +4,7 @@
 #include <QMenu>
 #include <QTimer>
 
-JsonTreeView::JsonTreeView(QWidget *parent) : QTreeView(parent)
+JsonTreeView::JsonTreeView(QWidget* parent) : QTreeView(parent)
 {
     setUniformRowHeights(true);
     setAnimated(false);
@@ -25,27 +25,43 @@ void JsonTreeView::upadteDPR(qreal r)
 void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
 {
     QModelIndex index = indexAt(event->pos());
-    if (!index.isValid()) {
+    if (!index.isValid())
         return;
-    }
+
+    using CA = JsonViewerStrategy::CopyAction;
 
     QMenu menu(this);
 
-    QAction* copyKeyAction = menu.addAction(tr("Copy Key"));
-    QAction* copyValueAction = menu.addAction(tr("Copy Value"));
-    QAction* copyPathAction = menu.addAction(tr("Copy Path (JSON Pointer)"));
+    QAction* copyKeyAction      = nullptr;
+    QAction* copyValueAction    = nullptr;
+    QAction* copyPathAction     = nullptr;
+    QAction* copyKeyValueAction = nullptr;
+    QAction* copySubtreeAction  = nullptr;
+
+    if (m_copyActions & CA::Key)
+        copyKeyAction = menu.addAction(tr("Copy Key"));
+    if (m_copyActions & CA::Value)
+        copyValueAction = menu.addAction(tr("Copy Value"));
+    if (m_copyActions & CA::Path)
+        copyPathAction = menu.addAction(tr("Copy Path (JSON Pointer)"));
+    if (m_copyActions & CA::KeyValue)
+        copyKeyValueAction = menu.addAction(tr("Copy Key:Value"));
     menu.addSeparator();
-    QAction* copySubtreeAction = menu.addAction(tr("Copy Subtree"));
+    if (m_copyActions & CA::Subtree)
+        copySubtreeAction = menu.addAction(tr("Copy Subtree"));
 
     QAction* selected = menu.exec(event->globalPos());
+    if (!selected)
+        return;
 
-    if (selected == copyKeyAction) {
+    if (selected == copyKeyAction)
         emit copyKeyRequested(index);
-    } else if (selected == copyValueAction) {
+    else if (selected == copyValueAction)
         emit copyValueRequested(index);
-    } else if (selected == copyPathAction) {
+    else if (selected == copyPathAction)
         emit copyPathRequested(index);
-    } else if (selected == copySubtreeAction) {
+    else if (selected == copyKeyValueAction)
+        emit copyKeyValueRequested(index);
+    else if (selected == copySubtreeAction)
         emit copySubtreeRequested(index);
-    }
 }

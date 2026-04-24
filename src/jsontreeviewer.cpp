@@ -16,7 +16,7 @@
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
 
-JsonTreeViewer::JsonTreeViewer(QWidget *parent)
+JsonTreeViewer::JsonTreeViewer(QWidget* parent)
     : ViewerBase(parent), m_btn_text_view(nullptr), m_view(nullptr)
 {
     qprintt << this;
@@ -30,7 +30,7 @@ JsonTreeViewer::~JsonTreeViewer()
 void JsonTreeViewer::initTopWnd()
 {
     m_top.wnd_bg           = new QWidget(this);
-    QHBoxLayout *layout_bg = new QHBoxLayout;
+    QHBoxLayout* layout_bg = new QHBoxLayout;
     m_top.wnd_bg->setLayout(layout_bg);
     m_top.filter = new QLineEdit(this);
     layout_bg->addWidget(m_top.filter);
@@ -42,8 +42,8 @@ void JsonTreeViewer::initTopWnd()
 
     m_top.btn->setText("Load Entire File");
     connect(m_top.btn, &QPushButton::clicked, this, [this]() {
-        if (auto tfpm = qobject_cast<TreeFilterProxyModel *>(m_view->model())) {
-            if (auto jtm = qobject_cast<JsonTreeModel *>(tfpm->sourceModel())) {
+        if (auto tfpm = qobject_cast<TreeFilterProxyModel*>(m_view->model())) {
+            if (auto jtm = qobject_cast<JsonTreeModel*>(tfpm->sourceModel())) {
                 m_top.btn->setText("Loading...");
                 m_top.btn->setVisible(false);
                 m_view->blockSignals(true);
@@ -98,67 +98,102 @@ void JsonTreeViewer::updateDPR(qreal r)
     }
 }
 
-void JsonTreeViewer::loadImpl(QBoxLayout *lay_content, QHBoxLayout *lay_ctrlbar)
+void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 {
     initTopWnd();
     lay_content->addWidget(m_top.wnd_bg);
-    JsonTreeModel *m = new JsonTreeModel(this);
+    JsonTreeModel* m = new JsonTreeModel(this);
     if (!m->load(options()->path())) {
         emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
         return;
     }
     auto proxy_model = new TreeFilterProxyModel(this);
     proxy_model->setSourceModel(m);
-    QTimer *timer = new QTimer(this);
+    QTimer* timer = new QTimer(this);
     timer->setSingleShot(true);
     connect(m_top.filter, &QLineEdit::textChanged, this,
-            [timer](const QString &) { timer->start(300); });
+            [timer](const QString&) { timer->start(300); });
     connect(timer, &QTimer::timeout, proxy_model, [proxy_model, this] {
         proxy_model->updateFilter(m_top.filter->text());
     });
 
     m_view = new JsonTreeView(this);
+    m_view->setCopyActions(m->supportedActions());
     m_view->setModel(proxy_model);
     lay_content->addWidget(m_view);
 
     // Connect copy signals
-    connect(m_view, &JsonTreeView::copyKeyRequested, this, [this, m](const QModelIndex& proxyIndex) {
-        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-        if (!proxy) return;
-        QString key = m->getKey(proxy->mapToSource(proxyIndex));
-        if (!key.isEmpty())
-            QApplication::clipboard()->setText(key);
-    });
+    connect(m_view, &JsonTreeView::copyKeyRequested, this,
+            [this, m](const QModelIndex& proxyIndex) {
+                auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                if (!proxy)
+                    return;
+                QString key = m->getKey(proxy->mapToSource(proxyIndex));
+                if (!key.isEmpty())
+                    QApplication::clipboard()->setText(key);
+            });
 
-    connect(m_view, &JsonTreeView::copyValueRequested, this, [this, m](const QModelIndex& proxyIndex) {
-        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-        if (!proxy) return;
-        QString value = m->getValue(proxy->mapToSource(proxyIndex));
-        if (!value.isEmpty())
-            QApplication::clipboard()->setText(value);
-    });
+    connect(m_view, &JsonTreeView::copyValueRequested, this,
+            [this, m](const QModelIndex& proxyIndex) {
+                auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                if (!proxy)
+                    return;
+                QString value = m->getValue(proxy->mapToSource(proxyIndex));
+                if (!value.isEmpty())
+                    QApplication::clipboard()->setText(value);
+            });
 
-    connect(m_view, &JsonTreeView::copyPathRequested, this, [this, m](const QModelIndex& proxyIndex) {
-        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-        if (!proxy) return;
-        QString path = m->getPath(proxy->mapToSource(proxyIndex));
-        if (!path.isEmpty())
-            QApplication::clipboard()->setText(path);
-    });
+    connect(m_view, &JsonTreeView::copyPathRequested, this,
+            [this, m](const QModelIndex& proxyIndex) {
+                auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                if (!proxy)
+                    return;
+                QString path = m->getPath(proxy->mapToSource(proxyIndex));
+                if (!path.isEmpty())
+                    QApplication::clipboard()->setText(path);
+            });
 
-    connect(m_view, &JsonTreeView::copySubtreeRequested, this, [this, m](const QModelIndex& proxyIndex) {
-        auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-        if (!proxy) return;
-        bool success = false;
-        QString errorMsg;
-        QString subtree = m->getSubtree(proxy->mapToSource(proxyIndex), &success, &errorMsg);
+    connect(
+        m_view, &JsonTreeView::copySubtreeRequested, this,
+        [this, m](const QModelIndex& proxyIndex) {
+            auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+            if (!proxy)
+                return;
+            bool success = false;
+            QString errorMsg;
+            QString subtree = m->getSubtree(proxy->mapToSource(proxyIndex),
+                                            &success, &errorMsg);
 
-        if (success) {
-            QApplication::clipboard()->setText(subtree);
-        } else {
-            QMessageBox::warning(this, tr("Copy Subtree Failed"), errorMsg);
-        }
-    });
+            if (success) {
+                QApplication::clipboard()->setText(subtree);
+            }
+            else {
+                QMessageBox::warning(this, tr("Copy Subtree Failed"), errorMsg);
+            }
+        });
+
+    connect(m_view, &JsonTreeView::copyKeyValueRequested, this,
+            [this, m](const QModelIndex& proxyIndex) {
+                auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                if (!proxy)
+                    return;
+                bool success = false;
+                QString errorMsg;
+                QString kv = m->getKeyValue(proxy->mapToSource(proxyIndex),
+                                            &success, &errorMsg);
+
+                if (success) {
+                    QApplication::clipboard()->setText(kv);
+                }
+                else {
+                    QMessageBox::warning(this, tr("Copy Key:Value Failed"),
+                                         errorMsg);
+                }
+            });
 
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();

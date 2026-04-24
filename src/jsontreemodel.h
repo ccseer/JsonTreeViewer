@@ -5,12 +5,16 @@
 #include <QSortFilterProxyModel>
 #include <memory>
 
+#include "strategies/jsonstrategy.h"
+
 class JsonTreeItem;
-class JsonViewerStrategy;
 
 class JsonTreeModel : public QAbstractItemModel {
     Q_OBJECT
 public:
+    using CopyActions = JsonViewerStrategy::CopyActions;
+    using CopyAction  = JsonViewerStrategy::CopyAction;
+
     enum class FileMode { Small, Medium, Large, Extreme };
 
     explicit JsonTreeModel(QObject* parent = nullptr);
@@ -20,11 +24,12 @@ public:
     bool load(const QString& path);
     void loadEverything();
 
-    FileMode fileMode() const
+    FileMode fileMode() const { return m_file_mode; }
+
+    CopyActions supportedActions() const
     {
-        return m_file_mode;
+        return m_strategy ? m_strategy->supportedActions() : CopyActions{};
     }
-    // QModelIndex navigateToPath(const QString& path);
 
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -48,6 +53,9 @@ public:
     QString getKey(const QModelIndex& index) const;
     QString getValue(const QModelIndex& index) const;
     QString getPath(const QModelIndex& index) const;
+    QString getKeyValue(const QModelIndex& index,
+                        bool* success     = nullptr,
+                        QString* errorMsg = nullptr) const;
     QString getSubtree(const QModelIndex& index,
                        bool* success     = nullptr,
                        QString* errorMsg = nullptr) const;

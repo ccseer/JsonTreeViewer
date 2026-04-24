@@ -2,6 +2,7 @@
 
 #include <simdjson.h>
 
+#include <QFlags>
 #include <QPair>
 #include <QString>
 #include <QVector>
@@ -16,6 +17,15 @@ constexpr qint64 LARGE_FILE_MAX  = 1024 * 1024 * 1024LL;
 
 class JsonViewerStrategy {
 public:
+    enum class CopyAction {
+        Key      = 1 << 0,
+        Value    = 1 << 1,
+        Path     = 1 << 2,
+        KeyValue = 1 << 3,
+        Subtree  = 1 << 4,
+    };
+    Q_DECLARE_FLAGS(CopyActions, CopyAction)
+
     virtual ~JsonViewerStrategy() = default;
 
     virtual bool load(const QString& path) = 0;
@@ -30,6 +40,8 @@ public:
 
     virtual const char* dataPtr() const = 0;
     virtual size_t dataSize() const     = 0;
+
+    virtual CopyActions supportedActions() const = 0;
 
     struct Metrics {
         qint64 parseTimeMs      = 0;
@@ -51,3 +63,5 @@ protected:
                                                    int start = -1,
                                                    int end   = -1);
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(JsonViewerStrategy::CopyActions)
