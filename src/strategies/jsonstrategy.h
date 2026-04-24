@@ -8,20 +8,26 @@
 
 class JsonTreeItem;
 
-// Strategy selection thresholds
 namespace StrategyThresholds {
-    constexpr qint64 SMALL_FILE_MAX   = 10 * 1024 * 1024;      // 10 MB
-    constexpr qint64 MEDIUM_FILE_MAX  = 100 * 1024 * 1024;    // 100 MB
-    constexpr qint64 LARGE_FILE_MAX   = 1024 * 1024 * 1024LL; // 1 GB
-}
+constexpr qint64 SMALL_FILE_MAX  = 10 * 1024 * 1024;
+constexpr qint64 MEDIUM_FILE_MAX = 100 * 1024 * 1024;
+constexpr qint64 LARGE_FILE_MAX  = 1024 * 1024 * 1024LL;
+}  // namespace StrategyThresholds
 
 class JsonViewerStrategy {
 public:
     virtual ~JsonViewerStrategy() = default;
 
     virtual bool load(const QString& path) = 0;
-    virtual QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item)
+
+    // start/end >= 0: return only children with index in [start, end].
+    // Pass -1 / -1 (defaults) to get all children.
+    virtual QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item,
+                                                   int start = -1,
+                                                   int end   = -1)
         = 0;
+    virtual quint32 countChildren(JsonTreeItem* parent_item) = 0;
+
     virtual const char* dataPtr() const = 0;
     virtual size_t dataSize() const     = 0;
 
@@ -34,19 +40,14 @@ public:
     virtual const Metrics& metrics() const = 0;
 
 protected:
-    // Shared local-parse logic used by Medium, Large and Extreme strategies.
-    // Parses only the byte range recorded in parent_item, returns child items.
+    static quint32 countLocalBufferChildren(JsonTreeItem* parent_item,
+                                            const char* base_ptr,
+                                            size_t base_size);
+
+    // start/end: same range semantics as extractChildren.
     static QVector<JsonTreeItem*> parseLocalBuffer(JsonTreeItem* parent_item,
                                                    const char* base_ptr,
-                                                   size_t base_size);
-
-    // Raw-byte type detection shared by all ondemand-based strategies.
-    static QPair<char, QString> typeAndPreviewFromRaw(const char* data_ptr,
-                                                      size_t offset,
-                                                      size_t length);
-
-    static bool hasChildren(char type)
-    {
-        return type == '{' || type == '[';
-    }
+                                                   size_t base_size,
+                                                   int start = -1,
+                                                   int end   = -1);
 };

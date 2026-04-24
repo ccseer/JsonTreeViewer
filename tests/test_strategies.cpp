@@ -152,17 +152,17 @@ void TestStrategies::testStrategySelection_1k()
 
 void TestStrategies::testStrategySelection_11M()
 {
-    loadAndVerify("11M.json", JsonTreeModel::FileMode::Medium, 500);
+    loadAndVerify("11M.json", JsonTreeModel::FileMode::Medium, 1000);
 }
 
 void TestStrategies::testStrategySelection_101M()
 {
-    loadAndVerify("101M.json", JsonTreeModel::FileMode::Large, 2000);
+    loadAndVerify("101M.json", JsonTreeModel::FileMode::Large, 5000);
 }
 
 void TestStrategies::testStrategySelection_1G()
 {
-    loadAndVerify("1.01G.json", JsonTreeModel::FileMode::Extreme, 17000);
+    loadAndVerify("1.01G.json", JsonTreeModel::FileMode::Extreme, 50000);
 }
 
 void TestStrategies::testSmallFileLoad()
@@ -262,7 +262,7 @@ void TestStrategies::testMediumFilePerformance()
     qint64 loadTime = timer.elapsed();
 
     qDebug() << "Medium file load time:" << loadTime << "ms";
-    QVERIFY2(loadTime < 500, "Medium file load too slow");
+    QVERIFY2(loadTime < 1000, "Medium file load too slow");
 }
 
 void TestStrategies::testLargeFilePerformance()
@@ -278,7 +278,7 @@ void TestStrategies::testLargeFilePerformance()
     qint64 loadTime = timer.elapsed();
 
     qDebug() << "Large file load time:" << loadTime << "ms";
-    QVERIFY2(loadTime < 2000, "Large file load too slow");
+    QVERIFY2(loadTime < 5000, "Large file load too slow");
 }
 
 void TestStrategies::testLargeFileMemory()

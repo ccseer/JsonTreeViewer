@@ -1,8 +1,8 @@
 #include "memorymappedfile.h"
 
-#include <QDebug>
+#include "logging.h"
 
-#define qprintt qDebug() << "[JsonTreeViewer]"
+#define qprintt qprint << "[MemoryMappedFile]"
 
 MemoryMappedFile::MemoryMappedFile() = default;
 

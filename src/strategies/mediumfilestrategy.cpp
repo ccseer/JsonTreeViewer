@@ -23,9 +23,14 @@ bool MediumFileStrategy::load(const QString& path)
 }
 
 QVector<JsonTreeItem*> MediumFileStrategy::extractChildren(
-    JsonTreeItem* parent_item)
+    JsonTreeItem* parent_item, int start, int end)
 {
-    return parseLocalBuffer(parent_item, dataPtr(), dataSize());
+    return parseLocalBuffer(parent_item, dataPtr(), dataSize(), start, end);
+}
+
+quint32 MediumFileStrategy::countChildren(JsonTreeItem* parent_item)
+{
+    return countLocalBufferChildren(parent_item, dataPtr(), dataSize());
 }
 
 const char* MediumFileStrategy::dataPtr() const

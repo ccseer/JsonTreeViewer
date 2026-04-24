@@ -266,19 +266,96 @@ JsonTreeItem* JsonTreeModel::getItem(const QModelIndex& index) const
 
 QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
 {
-    if (!parent_item || !parent_item->has_children) {
+    if (!parent_item || !parent_item->has_children)
         return {};
-    }
-    if (!parent_item->children.isEmpty()) {
-        return {};
+
+    if (parent_item->is_virtual_page) {
+        if (!parent_item->children.isEmpty())
+            return {};
+        JsonTreeItem* actual_parent = parent_item->parent;
+        if (!actual_parent || !m_strategy)
+            return {};
+
+        // Pass range directly to strategy: O(page_size), not O(N).
+        QVector<JsonTreeItem*> page_children = m_strategy->extractChildren(
+            actual_parent, parent_item->page_start, parent_item->page_end);
+
+        for (JsonTreeItem* child : page_children)
+            child->parent = parent_item;
+
+        return page_children;
     }
 
-    // Use strategy to extract children
-    if (m_strategy) {
-        return m_strategy->extractChildren(parent_item);
+    if (!parent_item->children.isEmpty())
+        return {};
+
+    if (!m_strategy)
+        return {};
+
+    quint32 child_count = parent_item->child_count;
+    if (child_count == 0 && parent_item->has_children) {
+        child_count              = m_strategy->countChildren(parent_item);
+        parent_item->child_count = child_count;
     }
 
-    return {};
+    if (needsPaging(child_count, m_file_mode))
+        return createPagedChildren(parent_item, child_count);
+
+    return m_strategy->extractChildren(parent_item);
+}
+
+int JsonTreeModel::getPageSize(FileMode mode) const
+{
+    switch (mode) {
+    case FileMode::Small:
+        return 10000;
+    case FileMode::Medium:
+        return 1000;
+    case FileMode::Large:
+        return 500;
+    case FileMode::Extreme:
+        return 100;
+    }
+    return 1000;
+}
+
+bool JsonTreeModel::needsPaging(int child_count, FileMode mode) const
+{
+    return child_count > getPageSize(mode);
+}
+
+QVector<JsonTreeItem*> JsonTreeModel::createPagedChildren(
+    JsonTreeItem* parent_item, int total_children)
+{
+    QVector<JsonTreeItem*> paged_children;
+    int page_size = getPageSize(m_file_mode);
+    int total     = total_children;
+
+    // Create virtual page nodes
+    for (int start = 0; start < total; start += page_size) {
+        int end = qMin(start + page_size - 1, total - 1);
+
+        // Create virtual page node
+        QString page_key = QString("[%1..%2]").arg(start).arg(end);
+        JsonTreeItem* page_node
+            = new JsonTreeItem(page_key,
+                               parent_item->pointer,  // Same pointer as parent
+                               parent_item->type,     // Same type as parent
+                               QString(), parent_item);
+
+        page_node->is_virtual_page = true;
+        page_node->page_start      = start;
+        page_node->page_end        = end;
+        page_node->has_children    = true;
+        page_node->children_loaded = false;
+        page_node->child_count     = end - start + 1;
+
+        paged_children.append(page_node);
+    }
+
+    // No original children to delete since we just count them now
+
+    return paged_children;
 }
 
 bool JsonTreeModel::hasChildren(const QModelIndex& parent) const

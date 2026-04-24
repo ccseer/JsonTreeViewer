@@ -37,8 +37,13 @@ public:
     bool has_children;
 
     // Byte offset caching for performance
-    quint64 byte_offset;      // Node's byte offset in file
-    quint64 byte_length;      // Node's byte length
-    quint32 child_count;      // Number of children (for paging)
-    bool children_loaded;     // Whether children have been loaded
+    quint64 byte_offset;   // Node's byte offset in file
+    quint64 byte_length;   // Node's byte length
+    quint32 child_count;   // Number of children (for paging)
+    bool children_loaded;  // Whether children have been loaded
+
+    // Virtual paging support
+    bool is_virtual_page = false;  // Is this a virtual page node?
+    int page_start       = -1;     // Start index of page range
+    int page_end         = -1;     // End index of page range (inclusive)
 };

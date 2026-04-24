@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+
 #include <QString>
 
 // Memory-mapped file wrapper for large files

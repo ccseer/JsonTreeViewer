@@ -11,12 +11,7 @@ class JsonViewerStrategy;
 class JsonTreeModel : public QAbstractItemModel {
     Q_OBJECT
 public:
-    enum class FileMode {
-        Small,
-        Medium,
-        Large,
-        Extreme
-    };
+    enum class FileMode { Small, Medium, Large, Extreme };
 
     explicit JsonTreeModel(QObject* parent = nullptr);
     ~JsonTreeModel() override;
@@ -25,7 +20,10 @@ public:
     bool load(const QString& path);
     void loadEverything();
 
-    FileMode fileMode() const { return m_file_mode; }
+    FileMode fileMode() const
+    {
+        return m_file_mode;
+    }
     // QModelIndex navigateToPath(const QString& path);
 
     Qt::ItemFlags flags(const QModelIndex& index) const override;
@@ -49,6 +47,12 @@ public:
 private:
     JsonTreeItem* getItem(const QModelIndex& index) const;
     QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item);
+
+    // Paging support
+    int getPageSize(FileMode mode) const;
+    bool needsPaging(int child_count, FileMode mode) const;
+    QVector<JsonTreeItem*> createPagedChildren(JsonTreeItem* parent_item,
+                                               int total_children);
 
     JsonTreeItem* m_root_item;
     std::unique_ptr<JsonViewerStrategy> m_strategy;
