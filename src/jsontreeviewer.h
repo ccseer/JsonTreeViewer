@@ -2,6 +2,7 @@
 
 #include "seer/viewerbase.h"
 
+class QLabel;
 class QLineEdit;
 class JsonTreeView;
 class QPushButton;
@@ -32,6 +33,8 @@ private:
     } m_top;
 
     QPushButton* m_btn_text_view;
+    QLabel* m_status_bar   = nullptr;
+    QLabel* m_warning_icon = nullptr;
 
     JsonTreeView* m_view;
 };
