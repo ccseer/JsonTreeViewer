@@ -46,4 +46,13 @@ public:
     bool is_virtual_page = false;  // Is this a virtual page node?
     int page_start       = -1;     // Start index of page range
     int page_end         = -1;     // End index of page range (inclusive)
+
+    // Helper: Check if this is a loading placeholder
+    // Loading placeholders have: "Loading..." key, empty pointer, type=0,
+    // !has_children Multiple checks for safety
+    bool isLoadingPlaceholder() const
+    {
+        return key.startsWith("Loading") && pointer.isEmpty() && type == 0
+               && !has_children;
+    }
 };

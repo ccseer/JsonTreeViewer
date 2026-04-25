@@ -15,6 +15,23 @@ constexpr qint64 MEDIUM_FILE_MAX = 100 * 1024 * 1024;
 constexpr qint64 LARGE_FILE_MAX  = 1024 * 1024 * 1024LL;
 }  // namespace StrategyThresholds
 
+/**
+ * @brief Strategy type identifier
+ */
+enum class StrategyType {
+    Small,
+    Medium,
+    Large,
+    Extreme
+};
+
+/**
+ * @brief Base class for JSON viewing strategies
+ *
+ * This class defines the interface for different file size strategies.
+ * All methods use metadata (pointer, offset, length) instead of UI object
+ * pointers, making them safe to call from background threads.
+ */
 class JsonViewerStrategy {
 public:
     enum class CopyAction {
@@ -26,17 +43,80 @@ public:
     };
     Q_DECLARE_FLAGS(CopyActions, CopyAction)
 
+    /**
+     * @brief Factory method to create appropriate strategy based on file size
+     * @param fileSize Size of the JSON file in bytes
+     * @return Shared pointer to the created strategy
+     */
+    static std::shared_ptr<JsonViewerStrategy> createStrategy(qint64 fileSize);
+
     virtual ~JsonViewerStrategy() = default;
 
-    virtual bool load(const QString& path) = 0;
+    /**
+     * @brief Get the type of this strategy
+     * @return Strategy type identifier
+     */
+    virtual StrategyType type() const = 0;
 
-    // start/end >= 0: return only children with index in [start, end].
-    // Pass -1 / -1 (defaults) to get all children.
-    virtual QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item,
-                                                   int start = -1,
-                                                   int end   = -1)
+    /**
+     * @brief Initialize the strategy by loading the file
+     * @param path Path to the JSON file
+     * @return true on success, false on failure
+     *
+     * This method reads the file content and prepares the strategy for use.
+     * It can be called from a background thread.
+     */
+    virtual bool initialize(const QString& path) = 0;
+
+    /**
+     * @brief Get metadata for the root node
+     * @param[out] pointer JSON pointer for the root (usually "/")
+     * @param[out] byte_offset Byte offset in file
+     * @param[out] byte_length Byte length of the root value
+     * @param[out] child_count Number of children
+     *
+     * This method can be called from a background thread.
+     */
+    virtual void getRootMetadata(QString& pointer,
+                                 quint64& byte_offset,
+                                 quint64& byte_length,
+                                 quint32& child_count)
         = 0;
-    virtual quint32 countChildren(JsonTreeItem* parent_item) = 0;
+
+    /**
+     * @brief Extract children using metadata
+     * @param parent_pointer JSON pointer of the parent
+     * @param byte_offset Byte offset of the parent value in file
+     * @param byte_length Byte length of the parent value
+     * @param start Start index (inclusive, -1 for all)
+     * @param end End index (inclusive, -1 for all)
+     * @return Vector of child items (caller takes ownership)
+     *
+     * This method uses metadata instead of UI object pointers, making it
+     * safe to call from background threads. It should check for thread
+     * interruption periodically during heavy loops.
+     */
+    virtual QVector<JsonTreeItem*> extractChildren(
+        const QString& parent_pointer,
+        quint64 byte_offset,
+        quint64 byte_length,
+        int start = -1,
+        int end   = -1)
+        = 0;
+
+    /**
+     * @brief Count children using metadata
+     * @param parent_pointer JSON pointer of the parent
+     * @param byte_offset Byte offset of the parent value in file
+     * @param byte_length Byte length of the parent value
+     * @return Number of children
+     *
+     * This method can be called from a background thread.
+     */
+    virtual quint32 countChildren(const QString& parent_pointer,
+                                  quint64 byte_offset,
+                                  quint64 byte_length)
+        = 0;
 
     virtual const char* dataPtr() const = 0;
     virtual size_t dataSize() const     = 0;
@@ -52,16 +132,35 @@ public:
     virtual const Metrics& metrics() const = 0;
 
 protected:
-    static quint32 countLocalBufferChildren(JsonTreeItem* parent_item,
-                                            const char* base_ptr,
+    /**
+     * @brief Count children in a local buffer
+     * @param base_ptr Pointer to the JSON value
+     * @param base_size Size of the JSON value
+     * @return Number of children
+     *
+     * Helper method for counting children in a memory buffer.
+     */
+    static quint32 countLocalBufferChildren(const char* base_ptr,
                                             size_t base_size);
 
-    // start/end: same range semantics as extractChildren.
-    static QVector<JsonTreeItem*> parseLocalBuffer(JsonTreeItem* parent_item,
-                                                   const char* base_ptr,
-                                                   size_t base_size,
-                                                   int start = -1,
-                                                   int end   = -1);
+    /**
+     * @brief Parse children from a local buffer
+     * @param parent_pointer JSON pointer of the parent
+     * @param base_ptr Pointer to the JSON value
+     * @param base_size Size of the JSON value
+     * @param start Start index (inclusive, -1 for all)
+     * @param end End index (inclusive, -1 for all)
+     * @return Vector of child items (caller takes ownership)
+     *
+     * Helper method for parsing children from a memory buffer.
+     * Should check for thread interruption periodically.
+     */
+    static QVector<JsonTreeItem*> parseLocalBuffer(
+        const QString& parent_pointer,
+        const char* base_ptr,
+        size_t base_size,
+        int start = -1,
+        int end   = -1);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(JsonViewerStrategy::CopyActions)

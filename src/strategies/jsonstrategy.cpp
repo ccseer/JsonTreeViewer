@@ -1,9 +1,15 @@
 #include "jsonstrategy.h"
 
 #include <QDebug>
+#include <QThread>
+#include <limits>
 
 #include "../jsonnode.h"
 #include "../logging.h"
+#include "extremefilestrategy.h"
+#include "largefilestrategy.h"
+#include "mediumfilestrategy.h"
+#include "smallfilestrategy.h"
 
 #define qprintt qprint << "[JsonStrategy]"
 
@@ -43,9 +49,9 @@ bool hasChildren(char type)
 
 // Shared iteration for ondemand::value (at_pointer path).
 // Uses type() to select get_object / get_array without polluting ondemand
-// state.
+// state. Now accepts parent_pointer instead of parent_item.
 QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
-                                    JsonTreeItem* parent_item,
+                                    const QString& parent_pointer,
                                     const char* base_ptr,
                                     const char* parse_ptr,
                                     size_t base_off,
@@ -71,6 +77,15 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
         try {
             int idx = 0;
             for (auto field : obj) {
+                // Check for interruption periodically
+                if (idx % 100 == 0
+                    && QThread::currentThread()->isInterruptionRequested()) {
+                    qprintt << "Interrupted during object iteration at index"
+                            << idx;
+                    qDeleteAll(items_vec);
+                    return {};
+                }
+
                 if (range_mode && idx < start) {
                     ++idx;
                     continue;
@@ -99,18 +114,19 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 esc_key.replace("~", "~0").replace("/", "~1");
 
                 auto* item = new JsonTreeItem(
-                    key_str, parent_item->pointer + "/" + esc_key, vt, vp,
-                    parent_item);
+                    key_str, parent_pointer + "/" + esc_key, vt, vp,
+                    nullptr);  // parent will be set by caller
                 item->has_children = hasChildren(vt);
                 item->byte_offset  = abs_off;
                 item->byte_length  = len;
                 items_vec.append(item);
                 ++idx;
             }
-            parent_item->child_count = static_cast<quint32>(idx);
         }
         catch (...) {
             qprintt << "Exception while parsing object fields";
+            qDeleteAll(items_vec);
+            return {};
         }
     }
     else if (node_type == simdjson::ondemand::json_type::array) {
@@ -121,6 +137,15 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
         try {
             int idx = 0;
             for (auto element : arr) {
+                // Check for interruption periodically
+                if (idx % 100 == 0
+                    && QThread::currentThread()->isInterruptionRequested()) {
+                    qprintt << "Interrupted during array iteration at index"
+                            << idx;
+                    qDeleteAll(items_vec);
+                    return {};
+                }
+
                 if (range_mode && idx < start) {
                     ++idx;
                     continue;
@@ -145,18 +170,19 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 auto [vt, vp]   = typeAndPreviewFromRaw(base_ptr, abs_off, len);
                 QString idx_str = QString::number(idx);
                 auto* item      = new JsonTreeItem(
-                    idx_str, parent_item->pointer + "/" + idx_str, vt, vp,
-                    parent_item);
+                    idx_str, parent_pointer + "/" + idx_str, vt, vp,
+                    nullptr);  // parent will be set by caller
                 item->has_children = hasChildren(vt);
                 item->byte_offset  = abs_off;
                 item->byte_length  = len;
                 items_vec.append(item);
                 ++idx;
             }
-            parent_item->child_count = static_cast<quint32>(idx);
         }
         catch (...) {
             qprintt << "Exception while parsing array elements";
+            qDeleteAll(items_vec);
+            return {};
         }
     }
 
@@ -165,13 +191,50 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
 
 }  // namespace
 
-quint32 JsonViewerStrategy::countLocalBufferChildren(JsonTreeItem* parent_item,
-                                                     const char* base_ptr,
+std::shared_ptr<JsonViewerStrategy> JsonViewerStrategy::createStrategy(
+    qint64 fileSize)
+{
+    struct StrategyRule {
+        qint64 maxSize;
+        std::shared_ptr<JsonViewerStrategy> (*factory)();
+        const char* name;
+    };
+    constexpr static StrategyRule rules[]
+        = {{StrategyThresholds::SMALL_FILE_MAX,
+            []() -> std::shared_ptr<JsonViewerStrategy> {
+                return std::make_shared<SmallFileStrategy>();
+            },
+            "SmallFileStrategy"},
+           {StrategyThresholds::MEDIUM_FILE_MAX,
+            []() -> std::shared_ptr<JsonViewerStrategy> {
+                return std::make_shared<MediumFileStrategy>();
+            },
+            "MediumFileStrategy"},
+           {StrategyThresholds::LARGE_FILE_MAX,
+            []() -> std::shared_ptr<JsonViewerStrategy> {
+                return std::make_shared<LargeFileStrategy>();
+            },
+            "LargeFileStrategy"},
+           {(std::numeric_limits<qint64>::max)(),
+            []() -> std::shared_ptr<JsonViewerStrategy> {
+                return std::make_shared<ExtremeFileStrategy>();
+            },
+            "ExtremeFileStrategy"}};
+
+    for (const auto& rule : rules) {
+        if (fileSize < rule.maxSize) {
+            qprintt << "Using" << rule.name << fileSize;
+            return rule.factory();
+        }
+    }
+
+    // Fallback (should not reach here)
+    return std::make_shared<ExtremeFileStrategy>();
+}
+
+quint32 JsonViewerStrategy::countLocalBufferChildren(const char* base_ptr,
                                                      size_t base_size)
 {
-    if (!parent_item || !parent_item->has_children)
-        return 0;
-
     const size_t padding = simdjson::SIMDJSON_PADDING;
 
     simdjson::ondemand::parser parser;
@@ -180,52 +243,27 @@ quint32 JsonViewerStrategy::countLocalBufferChildren(JsonTreeItem* parent_item,
         return 0;
     auto& doc = iter_result.value_unsafe();
 
-    if (parent_item->pointer.isEmpty()) {
-        auto obj_res = doc.get_object();
-        if (!obj_res.error()) {
-            auto count_res = obj_res.value_unsafe().count_fields();
+    // Try as object first
+    auto obj_res = doc.get_object();
+    if (!obj_res.error()) {
+        auto count_res = obj_res.value_unsafe().count_fields();
+        if (!count_res.error())
+            return static_cast<quint32>(count_res.value_unsafe());
+    }
+
+    // Try as array (need fresh parser)
+    simdjson::ondemand::parser parser2;
+    auto iter2 = parser2.iterate(base_ptr, base_size, base_size + padding);
+    if (!iter2.error()) {
+        auto arr_res = iter2.value_unsafe().get_array();
+        if (!arr_res.error()) {
+            auto count_res = arr_res.value_unsafe().count_elements();
             if (!count_res.error())
                 return static_cast<quint32>(count_res.value_unsafe());
         }
-        simdjson::ondemand::parser parser2;
-        auto iter2 = parser2.iterate(base_ptr, base_size, base_size + padding);
-        if (!iter2.error()) {
-            auto arr_res = iter2.value_unsafe().get_array();
-            if (!arr_res.error()) {
-                auto count_res = arr_res.value_unsafe().count_elements();
-                if (!count_res.error())
-                    return static_cast<quint32>(count_res.value_unsafe());
-            }
-        }
-        return 0;
     }
-    else {
-        auto ptr_result = doc.at_pointer(parent_item->pointer.toStdString());
-        if (ptr_result.error())
-            return 0;
-        auto target   = ptr_result.value_unsafe();
-        auto type_res = target.type();
-        if (type_res.error())
-            return 0;
-        if (type_res.value_unsafe() == simdjson::ondemand::json_type::object) {
-            auto obj_res = target.get_object();
-            if (!obj_res.error()) {
-                auto count_res = obj_res.value_unsafe().count_fields();
-                if (!count_res.error())
-                    return static_cast<quint32>(count_res.value_unsafe());
-            }
-        }
-        else if (type_res.value_unsafe()
-                 == simdjson::ondemand::json_type::array) {
-            auto arr_res = target.get_array();
-            if (!arr_res.error()) {
-                auto count_res = arr_res.value_unsafe().count_elements();
-                if (!count_res.error())
-                    return static_cast<quint32>(count_res.value_unsafe());
-            }
-        }
-        return 0;
-    }
+
+    return 0;
 }
 
 // O(slice) parsing: when byte_offset + byte_length are recorded we parse only
@@ -234,25 +272,22 @@ quint32 JsonViewerStrategy::countLocalBufferChildren(JsonTreeItem* parent_item,
 // range_mode (start >= 0): items outside [start, end] are skipped without
 // allocating JsonTreeItem objects, making virtual-page expansion O(page_size).
 QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
-    JsonTreeItem* parent_item,
+    const QString& parent_pointer,
     const char* base_ptr,
     size_t base_size,
     int start,
     int end)
 {
-    if (!parent_item || !parent_item->has_children)
-        return {};
-
-    const bool range_mode = (start >= 0 && end >= start);
-
-    // In range_mode the caller already holds virtual-page children on the
-    // actual_parent node - skip the isEmpty guard so we can re-parse.
-    if (!range_mode && !parent_item->children.isEmpty())
-        return {};
-
-    const size_t padding = simdjson::SIMDJSON_PADDING;
+    const bool range_mode    = (start >= 0 && end >= start);
+    constexpr size_t padding = simdjson::SIMDJSON_PADDING;
 
     QVector<JsonTreeItem*> items_vec;
+
+    // Check for interruption before starting
+    if (QThread::currentThread()->isInterruptionRequested()) {
+        qprintt << "Interrupted before parsing";
+        return {};
+    }
 
     simdjson::ondemand::parser parser;
     auto iter_result = parser.iterate(base_ptr, base_size, base_size + padding);
@@ -263,11 +298,8 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
     }
     auto& doc = iter_result.value_unsafe();
 
-    if (parent_item->pointer.isEmpty()) {
+    if (parent_pointer.isEmpty() || parent_pointer == "/") {
         // Document root: try object then array directly.
-        // Calling type() on ondemand::document requires get_value() in some
-        // versions, so we try get_object first, then get_array on a fresh
-        // document parse.
         {
             auto obj_res = doc.get_object();
             if (!obj_res.error()) {
@@ -275,12 +307,22 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                 try {
                     int idx = 0;
                     for (auto field : obj) {
+                        // Check for interruption periodically
+                        if (idx % 100 == 0
+                            && QThread::currentThread()
+                                   ->isInterruptionRequested()) {
+                            qprintt << "Interrupted during root object parsing";
+                            qDeleteAll(items_vec);
+                            return {};
+                        }
+
                         if (range_mode && idx < start) {
                             ++idx;
                             continue;
                         }
                         if (range_mode && idx > end)
                             break;
+
                         auto fv        = field.value().value();
                         auto raw_tok   = fv.raw_json_token();
                         size_t abs_off = (raw_tok.data() - base_ptr);
@@ -302,19 +344,19 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                         esc_key.replace("~", "~0").replace("/", "~1");
                         auto [vt, vp]
                             = typeAndPreviewFromRaw(base_ptr, abs_off, len);
-                        auto* item = new JsonTreeItem(
-                            key_str, parent_item->pointer + "/" + esc_key, vt,
-                            vp, parent_item);
+                        auto* item = new JsonTreeItem(key_str, "/" + esc_key,
+                                                      vt, vp, nullptr);
                         item->has_children = hasChildren(vt);
                         item->byte_offset  = abs_off;
                         item->byte_length  = len;
                         items_vec.append(item);
                         ++idx;
                     }
-                    parent_item->child_count = static_cast<quint32>(idx);
                 }
                 catch (...) {
                     qprintt << "Exception while parsing object fields";
+                    qDeleteAll(items_vec);
+                    return {};
                 }
                 return items_vec;
             }
@@ -332,12 +374,23 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                     try {
                         int idx = 0;
                         for (auto element : arr) {
+                            // Check for interruption periodically
+                            if (idx % 100 == 0
+                                && QThread::currentThread()
+                                       ->isInterruptionRequested()) {
+                                qprintt
+                                    << "Interrupted during root array parsing";
+                                qDeleteAll(items_vec);
+                                return {};
+                            }
+
                             if (range_mode && idx < start) {
                                 ++idx;
                                 continue;
                             }
                             if (range_mode && idx > end)
                                 break;
+
                             auto ev        = element.value();
                             auto raw_tok   = ev.raw_json_token();
                             size_t abs_off = (raw_tok.data() - base_ptr);
@@ -356,18 +409,18 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                                 = typeAndPreviewFromRaw(base_ptr, abs_off, len);
                             QString idx_str = QString::number(idx);
                             auto* item      = new JsonTreeItem(
-                                idx_str, parent_item->pointer + "/" + idx_str,
-                                vt, vp, parent_item);
+                                idx_str, "/" + idx_str, vt, vp, nullptr);
                             item->has_children = hasChildren(vt);
                             item->byte_offset  = abs_off;
                             item->byte_length  = len;
                             items_vec.append(item);
                             ++idx;
                         }
-                        parent_item->child_count = static_cast<quint32>(idx);
                     }
                     catch (...) {
                         qprintt << "Exception while parsing array elements";
+                        qDeleteAll(items_vec);
+                        return {};
                     }
                     return items_vec;
                 }
@@ -377,14 +430,14 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
         return items_vec;
     }
     else {
-        auto ptr_result = doc.at_pointer(parent_item->pointer.toStdString());
+        auto ptr_result = doc.at_pointer(parent_pointer.toStdString());
         if (ptr_result.error()) {
-            qprintt << "Failed to navigate to pointer:" << parent_item->pointer
+            qprintt << "Failed to navigate to pointer:" << parent_pointer
                     << "Error:" << simdjson::error_message(ptr_result.error());
             return {};
         }
         auto target = ptr_result.value_unsafe();
-        return iterateValue(target, parent_item, base_ptr, base_ptr, 0,
+        return iterateValue(target, parent_pointer, base_ptr, base_ptr, 0,
                             range_mode, start, end);
     }
 }

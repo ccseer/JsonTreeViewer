@@ -1,11 +1,5 @@
 #include "extremefilestrategy.h"
 
-#include <simdjson.h>
-
-#include <QDebug>
-#include <cstring>
-
-#include "../jsonnode.h"
 #include "../logging.h"
 
 #define qprintt qprint << "[ExtremeFileStrategy]"
@@ -13,7 +7,7 @@
 ExtremeFileStrategy::ExtremeFileStrategy()  = default;
 ExtremeFileStrategy::~ExtremeFileStrategy() = default;
 
-bool ExtremeFileStrategy::load(const QString& path)
+bool ExtremeFileStrategy::initialize(const QString& path)
 {
     qprintt << "Loading extreme file (mmap):" << path;
 
@@ -45,21 +39,40 @@ bool ExtremeFileStrategy::preparePadding()
     return true;
 }
 
-QVector<JsonTreeItem*> ExtremeFileStrategy::extractChildren(
-    JsonTreeItem* parent_item, int start, int end)
+void ExtremeFileStrategy::getRootMetadata(QString& pointer,
+                                          quint64& byte_offset,
+                                          quint64& byte_length,
+                                          quint32& child_count)
 {
-    return parseLocalBuffer(parent_item, m_data_ptr, m_data_size, start, end);
+    pointer     = "";  // Root pointer is empty string per RFC 6901
+    byte_offset = 0;
+    byte_length = m_data_size;
+    child_count = countLocalBufferChildren(dataPtr(), dataSize());
 }
 
-quint32 ExtremeFileStrategy::countChildren(JsonTreeItem* parent_item)
+QVector<JsonTreeItem*> ExtremeFileStrategy::extractChildren(
+    const QString& parent_pointer,
+    quint64 byte_offset,
+    quint64 byte_length,
+    int start,
+    int end)
 {
-    return countLocalBufferChildren(parent_item, dataPtr(), dataSize());
+    return parseLocalBuffer(parent_pointer, m_data_ptr, m_data_size, start,
+                            end);
+}
+
+quint32 ExtremeFileStrategy::countChildren(const QString& parent_pointer,
+                                           quint64 byte_offset,
+                                           quint64 byte_length)
+{
+    return countLocalBufferChildren(dataPtr(), dataSize());
 }
 
 const char* ExtremeFileStrategy::dataPtr() const
 {
     return m_data_ptr;
 }
+
 size_t ExtremeFileStrategy::dataSize() const
 {
     return m_data_size;

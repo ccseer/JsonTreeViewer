@@ -5,6 +5,7 @@
 class QLabel;
 class QLineEdit;
 class JsonTreeView;
+class JsonTreeModel;
 class QPushButton;
 
 class JsonTreeViewer : public ViewerBase {
@@ -26,9 +27,10 @@ private:
     void onTextViewBtnClicked();
 
     void initTopWnd();
+    void startBackgroundLoad(JsonTreeModel* model, const QString& path);
+
     struct {
-        QWidget* wnd_bg   = nullptr;
-        QPushButton* btn  = nullptr;
+        QWidget* wnd_bg   = nullptr; 
         QLineEdit* filter = nullptr;
     } m_top;
 

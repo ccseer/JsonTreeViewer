@@ -17,6 +17,7 @@ TESTS_CONFIG = [
     {"exe": "test_strategies.exe", "log": "test_strategies.log"},
     {"exe": "test_paging.exe", "log": "test_paging.log"},
     {"exe": "test_copy.exe", "log": "test_copy.log"},
+    {"exe": "test_async_loading.exe", "log": "test_async_loading.log"},
 ]
 # --- End Configuration ---
 

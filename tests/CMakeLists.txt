@@ -9,6 +9,7 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(test_strategies
     test_strategies.cpp
     ../src/jsontreemodel.cpp
+    ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
     ../src/strategies/smallfilestrategy.cpp
@@ -41,6 +42,7 @@ set_tests_properties(StrategyTests PROPERTIES
 add_executable(test_paging
     test_paging.cpp
     ../src/jsontreemodel.cpp
+    ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
     ../src/strategies/smallfilestrategy.cpp
@@ -72,6 +74,7 @@ set_tests_properties(PagingTests PROPERTIES
 add_executable(test_copy
     test_copy.cpp
     ../src/jsontreemodel.cpp
+    ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
     ../src/strategies/smallfilestrategy.cpp
@@ -96,6 +99,38 @@ target_link_libraries(test_copy PRIVATE
 add_test(NAME CopyTests COMMAND test_copy)
 
 set_tests_properties(CopyTests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# Async loading test executable (Phase 13)
+add_executable(test_async_loading
+    test_async_loading.cpp
+    ../src/jsontreemodel.cpp
+    ../src/loadworker.cpp
+    ../src/jsonnode.h
+    ../src/strategies/jsonstrategy.cpp
+    ../src/strategies/smallfilestrategy.cpp
+    ../src/strategies/mediumfilestrategy.cpp
+    ../src/strategies/largefilestrategy.cpp
+    ../src/strategies/extremefilestrategy.cpp
+    ../src/memorymappedfile.cpp
+)
+
+target_include_directories(test_async_loading PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+)
+
+target_link_libraries(test_async_loading PRIVATE
+    simdjson_static
+    Qt6::Core
+    Qt6::Test
+)
+
+# Add async loading test
+add_test(NAME AsyncLoadingTests COMMAND test_async_loading)
+
+set_tests_properties(AsyncLoadingTests PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 

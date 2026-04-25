@@ -6,13 +6,12 @@
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QPushButton>
-#include <QStandardPaths>
 #include <QTimer>
 
 #include "jsontreemodel.h"
 #include "jsontreeview.h"
+#include "loadworker.h"
 #include "seer/viewerhelper.h"
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
@@ -35,26 +34,9 @@ void JsonTreeViewer::initTopWnd()
     m_top.wnd_bg->setLayout(layout_bg);
     m_top.filter = new QLineEdit(this);
     layout_bg->addWidget(m_top.filter);
-    m_top.btn = new QPushButton(this);
-    layout_bg->addWidget(m_top.btn);
 
     m_top.filter->setPlaceholderText("Filter...");
     m_top.filter->setClearButtonEnabled(true);
-
-    m_top.btn->setText("Load Entire File");
-    connect(m_top.btn, &QPushButton::clicked, this, [this]() {
-        if (auto tfpm = qobject_cast<TreeFilterProxyModel*>(m_view->model())) {
-            if (auto jtm = qobject_cast<JsonTreeModel*>(tfpm->sourceModel())) {
-                m_top.btn->setText("Loading...");
-                m_top.btn->setVisible(false);
-                m_view->blockSignals(true);
-                jtm->loadEverything();
-                m_view->blockSignals(false);
-            }
-        }
-    });
-    // too slow, take 30s to load 10MB file
-    m_top.btn->setVisible(false);
 }
 
 QSize JsonTreeViewer::getContentSize() const
@@ -83,8 +65,6 @@ void JsonTreeViewer::updateDPR(qreal r)
         auto m = 9 * r;
         m_top.wnd_bg->layout()->setContentsMargins(m, 0, m, 0);
         m_top.wnd_bg->layout()->setSpacing(0);
-        m_top.btn->setFixedHeight(height_top);
-        m_top.btn->setFont(font);
         m_top.filter->setFont(font);
         m_top.filter->setFixedHeight(height_top);
     }
@@ -121,11 +101,9 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     initTopWnd();
     lay_content->setSpacing(0);
     lay_content->addWidget(m_top.wnd_bg);
+
     JsonTreeModel* m = new JsonTreeModel(this);
-    if (!m->load(options()->path())) {
-        emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
-        return;
-    }
+
     auto proxy_model = new TreeFilterProxyModel(this);
     proxy_model->setSourceModel(m);
     QTimer* timer = new QTimer(this);
@@ -141,39 +119,15 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     m_view->setModel(proxy_model);
     lay_content->addWidget(m_view);
 
-    // Status bar with warning icon
+    // Status bar
     QWidget* statusBarWidget  = new QWidget(this);
     QHBoxLayout* statusLayout = new QHBoxLayout(statusBarWidget);
     statusLayout->setContentsMargins(0, 0, 0, 0);
     statusLayout->setSpacing(0);
-
     m_status_bar = new QLabel(this);
     m_status_bar->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_status_bar->setTextInteractionFlags(Qt::TextSelectableByMouse);
     statusLayout->addWidget(m_status_bar, 1);
-
-    // Warning icon for large/extreme files
-    using FM = JsonTreeModel::FileMode;
-    if (m->fileMode() == FM::Large || m->fileMode() == FM::Extreme) {
-        m_warning_icon = new QLabel(this);
-        m_warning_icon->setText(" ⚠ ");
-        m_warning_icon->setAlignment(Qt::AlignCenter);
-
-        QStringList warnings;
-        if (m->fileMode() == FM::Extreme) {
-            warnings << tr("Extreme file (>1 GB):")
-                     << tr("• Only Key/Value copy supported")
-                     << tr("• Path and Subtree operations disabled");
-        }
-        else {
-            warnings << tr("Large file (>100 MB):")
-                     << tr("• Path copy supported")
-                     << tr("• Subtree and Key:Value copy disabled");
-        }
-        m_warning_icon->setToolTip(warnings.join("\n"));
-        statusLayout->addWidget(m_warning_icon, 0);
-    }
-
     lay_content->addWidget(statusBarWidget);
 
     connect(
@@ -242,34 +196,33 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
             QString errorMsg;
             QString subtree = m->getSubtree(proxy->mapToSource(proxyIndex),
                                             &success, &errorMsg);
-
             if (success) {
                 QApplication::clipboard()->setText(subtree);
             }
             else {
-                QMessageBox::warning(this, tr("Copy Subtree Failed"), errorMsg);
+                emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                tr("Copy Subtree Failed") + "\n" + errorMsg);
             }
         });
 
-    connect(m_view, &JsonTreeView::copyKeyValueRequested, this,
-            [this, m](const QModelIndex& proxyIndex) {
-                auto* proxy
-                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-                if (!proxy)
-                    return;
-                bool success = false;
-                QString errorMsg;
-                QString kv = m->getKeyValue(proxy->mapToSource(proxyIndex),
-                                            &success, &errorMsg);
-
-                if (success) {
-                    QApplication::clipboard()->setText(kv);
-                }
-                else {
-                    QMessageBox::warning(this, tr("Copy Key:Value Failed"),
-                                         errorMsg);
-                }
-            });
+    connect(
+        m_view, &JsonTreeView::copyKeyValueRequested, this,
+        [this, m](const QModelIndex& proxyIndex) {
+            auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+            if (!proxy)
+                return;
+            bool success = false;
+            QString errorMsg;
+            QString kv = m->getKeyValue(proxy->mapToSource(proxyIndex),
+                                        &success, &errorMsg);
+            if (success) {
+                QApplication::clipboard()->setText(kv);
+            }
+            else {
+                emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                tr("Copy Key:Value Failed") + "\n" + errorMsg);
+            }
+        });
 
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();
@@ -283,7 +236,9 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     updateDPR(options()->dpr());
     updateTheme(options()->theme());
 
-    emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
+    // Start background loading
+    startBackgroundLoad(m, options()->path());
+    // VCV_Loaded will be emitted by startBackgroundLoad after loading completes
 }
 
 void JsonTreeViewer::onTextViewBtnClicked()
@@ -291,4 +246,81 @@ void JsonTreeViewer::onTextViewBtnClicked()
     // built-in viewer
     emit sigCommand(ViewCommandType::VCT_LoadViewerWithNewType,
                     QString("Text"));
+}
+
+void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
+                                         const QString& path)
+{
+    qprintt << "=== [BG LOAD START] ===" << path;
+
+    if (m_status_bar) {
+        m_status_bar->setText(tr("Loading..."));
+    }
+
+    connect(
+        model, &JsonTreeModel::loadFinished, this,
+        [this, model](bool success, qint64) {
+            qprintt << "[BG LOAD] Back in main thread, updating UI...";
+            QElapsedTimer uiTimer;
+            uiTimer.start();
+
+            // Back in main thread for UI updates
+            if (!success) {
+                if (m_status_bar) {
+                    m_status_bar->setText(tr("Failed to load JSON file"));
+                }
+                emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
+                qprintt << "=== [BG LOAD END] Failed ===";
+                return;
+            }
+
+            m_view->setCopyActions(model->supportedActions());
+
+            qprintt << "[BG LOAD] Adding warning icon if needed...";
+
+            // Add warning icon for large/extreme files
+            using FM = JsonTreeModel::FileMode;
+            if ((model->fileMode() == FM::Large
+                 || model->fileMode() == FM::Extreme)
+                && (!m_warning_icon && m_status_bar
+                    && m_status_bar->parent())) {
+                m_warning_icon = new QLabel(this);
+                m_warning_icon->setText(" ⚠ ");
+                m_warning_icon->setAlignment(Qt::AlignCenter);
+
+                QStringList warnings;
+                if (model->fileMode() == FM::Extreme) {
+                    warnings << tr("Extreme file (>1 GB):")
+                             << tr("• Only Key/Value copy supported")
+                             << tr("• Path and Subtree operations disabled");
+                }
+                else {
+                    warnings << tr("Large file (>100 MB):")
+                             << tr("• Path copy supported")
+                             << tr("• Subtree and Key:Value copy disabled");
+                }
+                m_warning_icon->setToolTip(warnings.join("\n"));
+
+                // Add to status bar layout
+                if (auto* wgt = qobject_cast<QWidget*>(m_status_bar->parent());
+                    wgt && wgt->layout()) {
+                    wgt->layout()->addWidget(m_warning_icon);
+                }
+            }
+
+            qprintt << "[BG LOAD] UI update completed in" << uiTimer.elapsed()
+                    << "ms";
+
+            if (m_status_bar) {
+                m_status_bar->setText(tr("Ready"));
+            }
+
+            qprintt << "=== [BG LOAD END] Success ===";
+            emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
+        },
+        Qt::SingleShotConnection);
+
+    // Start loading (model handles background thread internally)
+    qprintt << "[BG LOAD] Starting model load...";
+    model->load(path);
 }

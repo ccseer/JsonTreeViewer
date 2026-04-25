@@ -1,7 +1,5 @@
 #include "smallfilestrategy.h"
 
-#include <QDebug>
-
 #include "../jsonnode.h"
 #include "../logging.h"
 
@@ -10,7 +8,7 @@
 SmallFileStrategy::SmallFileStrategy()  = default;
 SmallFileStrategy::~SmallFileStrategy() = default;
 
-bool SmallFileStrategy::load(const QString& path)
+bool SmallFileStrategy::initialize(const QString& path)
 {
     qprintt << "Loading small file:" << path;
     auto result = simdjson::padded_string::load(path.toUtf8().data());
@@ -19,18 +17,40 @@ bool SmallFileStrategy::load(const QString& path)
         return false;
     }
     m_json_data = std::move(result.value());
+    qprintt << "Loaded" << m_json_data.size() << "bytes";
     return true;
 }
 
-QVector<JsonTreeItem*> SmallFileStrategy::extractChildren(
-    JsonTreeItem* parent_item, int start, int end)
+void SmallFileStrategy::getRootMetadata(QString& pointer,
+                                        quint64& byte_offset,
+                                        quint64& byte_length,
+                                        quint32& child_count)
 {
-    return parseLocalBuffer(parent_item, dataPtr(), dataSize(), start, end);
+    pointer     = "";  // Root pointer is empty string per RFC 6901
+    byte_offset = 0;
+    byte_length = m_json_data.size();
+    child_count = countLocalBufferChildren(dataPtr(), dataSize());
 }
 
-quint32 SmallFileStrategy::countChildren(JsonTreeItem* parent_item)
+QVector<JsonTreeItem*> SmallFileStrategy::extractChildren(
+    const QString& parent_pointer,
+    quint64 byte_offset,
+    quint64 byte_length,
+    int start,
+    int end)
 {
-    return countLocalBufferChildren(parent_item, dataPtr(), dataSize());
+    // For small files, we use the entire buffer
+    // byte_offset and byte_length are ignored since we have the whole file in
+    // memory
+    return parseLocalBuffer(parent_pointer, dataPtr(), dataSize(), start, end);
+}
+
+quint32 SmallFileStrategy::countChildren(const QString& parent_pointer,
+                                         quint64 byte_offset,
+                                         quint64 byte_length)
+{
+    // For small files, we use the entire buffer
+    return countLocalBufferChildren(dataPtr(), dataSize());
 }
 
 const char* SmallFileStrategy::dataPtr() const

@@ -1,11 +1,5 @@
 #include "largefilestrategy.h"
 
-#include <simdjson.h>
-
-#include <QDebug>
-#include <cstring>
-
-#include "../jsonnode.h"
 #include "../logging.h"
 
 #define qprintt qprint << "[LargeFileStrategy]"
@@ -13,7 +7,7 @@
 LargeFileStrategy::LargeFileStrategy()  = default;
 LargeFileStrategy::~LargeFileStrategy() = default;
 
-bool LargeFileStrategy::load(const QString& path)
+bool LargeFileStrategy::initialize(const QString& path)
 {
     qprintt << "Loading large file (mmap):" << path;
 
@@ -31,9 +25,6 @@ bool LargeFileStrategy::load(const QString& path)
     return true;
 }
 
-// simdjson ondemand requires SIMDJSON_PADDING bytes of readable memory beyond
-// the end of the document.  The mmap'd region ends at the last file byte, so
-// we copy the tail into a small heap buffer that has the required padding.
 bool LargeFileStrategy::preparePadding()
 {
     const size_t file_size = m_mmap.size();
@@ -42,8 +33,6 @@ bool LargeFileStrategy::preparePadding()
     if (file_size == 0)
         return false;
 
-    // simdjson requires SIMDJSON_PADDING readable bytes past the last data
-    // byte. Allocate a contiguous buffer = file + padding so iterate() is safe.
     m_padding_buf.resize(file_size + padding, '\0');
     std::memcpy(m_padding_buf.data(), m_mmap.data(), file_size);
     m_data_ptr  = m_padding_buf.data();
@@ -51,21 +40,40 @@ bool LargeFileStrategy::preparePadding()
     return true;
 }
 
-QVector<JsonTreeItem*> LargeFileStrategy::extractChildren(
-    JsonTreeItem* parent_item, int start, int end)
+void LargeFileStrategy::getRootMetadata(QString& pointer,
+                                        quint64& byte_offset,
+                                        quint64& byte_length,
+                                        quint32& child_count)
 {
-    return parseLocalBuffer(parent_item, m_data_ptr, m_data_size, start, end);
+    pointer     = "";  // Root pointer is empty string per RFC 6901
+    byte_offset = 0;
+    byte_length = m_data_size;
+    child_count = countLocalBufferChildren(dataPtr(), dataSize());
 }
 
-quint32 LargeFileStrategy::countChildren(JsonTreeItem* parent_item)
+QVector<JsonTreeItem*> LargeFileStrategy::extractChildren(
+    const QString& parent_pointer,
+    quint64 byte_offset,
+    quint64 byte_length,
+    int start,
+    int end)
 {
-    return countLocalBufferChildren(parent_item, dataPtr(), dataSize());
+    return parseLocalBuffer(parent_pointer, m_data_ptr, m_data_size, start,
+                            end);
+}
+
+quint32 LargeFileStrategy::countChildren(const QString& parent_pointer,
+                                         quint64 byte_offset,
+                                         quint64 byte_length)
+{
+    return countLocalBufferChildren(dataPtr(), dataSize());
 }
 
 const char* LargeFileStrategy::dataPtr() const
 {
     return m_data_ptr;
 }
+
 size_t LargeFileStrategy::dataSize() const
 {
     return m_data_size;

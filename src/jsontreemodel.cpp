@@ -1,18 +1,16 @@
 #include "jsontreemodel.h"
 
 #include <QElapsedTimer>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPointer>
 #include <QStringBuilder>
+#include <QTimer>
 
 #include "jsonnode.h"
+#include "loadworker.h"
 #include "logging.h"
-#include "strategies/extremefilestrategy.h"
 #include "strategies/jsonstrategy.h"
-#include "strategies/largefilestrategy.h"
-#include "strategies/mediumfilestrategy.h"
-#include "strategies/smallfilestrategy.h"
 
 using namespace simdjson;
 
@@ -28,25 +26,6 @@ constexpr auto g_type_arr = "Array";
 enum ColumnIndex : uchar { CI_Key = 0, CI_Value = 1, CI_Count };
 }  // namespace
 
-QString JsonTreeModel::toEscaped(const QString& key)
-{
-    QString escaped;
-    escaped.reserve(key.size() * 2);
-
-    for (QChar ch : key) {
-        if (ch == '~') {
-            escaped += "~0";
-        }
-        else if (ch == '/') {
-            escaped += "~1";
-        }
-        else {
-            escaped += ch;
-        }
-    }
-    return escaped;
-}
-
 //////////////////////////////////////////////
 JsonTreeModel::JsonTreeModel(QObject* parent)
     : QAbstractItemModel(parent),
@@ -59,88 +38,90 @@ JsonTreeModel::JsonTreeModel(QObject* parent)
 
 JsonTreeModel::~JsonTreeModel()
 {
-    delete m_root_item;
+    qprintt << "~JsonTreeModel: Cleaning up";
+
+    // With shared_ptr and auto-cleanup chain, threads will clean themselves up
+    // We just need to clear the queue and fetching set
+    m_fetch_queue.clear();
+    m_fetching_items.clear();
+
+    // Safe to delete root immediately (or let shared_ptr handle it)
+    // m_strategy will be destroyed when last shared_ptr reference is released
+    // Don't delete m_root_item manually since it's managed by m_root_shared
+    m_root_item = nullptr;
+    m_root_shared.reset();
+
+    qprintt << "~JsonTreeModel: Done (strategy refcount:"
+            << (m_strategy ? m_strategy.use_count() : 0) << ")";
 }
 
 bool JsonTreeModel::load(const QString& path)
 {
-    // Get file size to select strategy
-    QFileInfo fileInfo(path);
-    qint64 fileSize = fileInfo.size();
+    qprintt << "=== [LOAD START ASYNC] ===" << path;
 
-    qprintt << "Loading file:" << path << "Size:" << fileSize << "bytes";
-
-    // Select strategy based on file size
-    if (fileSize < StrategyThresholds::SMALL_FILE_MAX) {
-        m_strategy  = std::make_unique<SmallFileStrategy>();
-        m_file_mode = FileMode::Small;
-        qprintt << "Using SmallFileStrategy";
-    }
-    else if (fileSize < StrategyThresholds::MEDIUM_FILE_MAX) {
-        m_strategy  = std::make_unique<MediumFileStrategy>();
-        m_file_mode = FileMode::Medium;
-        qprintt << "Using MediumFileStrategy";
-    }
-    else if (fileSize < StrategyThresholds::LARGE_FILE_MAX) {
-        m_strategy  = std::make_unique<LargeFileStrategy>();
-        m_file_mode = FileMode::Large;
-        qprintt << "Using LargeFileStrategy";
-    }
-    else {
-        m_strategy  = std::make_unique<ExtremeFileStrategy>();
-        m_file_mode = FileMode::Extreme;
-        qprintt << "Using ExtremeFileStrategy";
-    }
-
-    // Load file using selected strategy
-    if (!m_strategy->load(path)) {
-        qprintt << "Strategy load failed";
-        return false;
-    }
-
-    // Set root item metadata
-    m_root_item->byte_offset = 0;
-    m_root_item->byte_length = m_strategy->dataSize();
-
-    // Extract first level children
-    QVector<JsonTreeItem*> items;
-    try {
-        items = extractChildren(m_root_item);
-        if (items.isEmpty()) {
-            qprintt << "extractChildren: empty";
-            return false;
+    auto* thread                = new JTVThread;
+    QPointer<LoadWorker> worker = new LoadWorker(path);
+    connect(this, &JsonTreeModel::destroyed, [worker, thread]() {
+        // ui destoryed while worker is running
+        if (worker) {
+            qprintt
+                << "[LOAD ASYNC] Model destroyed, requesting worker to stop";
+            thread->requestInterruption();
         }
-    }
-    catch (...) {
-        qprintt << "exception:" << Q_FUNC_INFO;
-        return false;
-    }
-
-    beginInsertRows({}, 0, items.count() - 1);
-    m_root_item->children.append(items);
-    m_root_item->children_loaded = true;
-    endInsertRows();
-    m_root_item->has_children = !m_root_item->children.isEmpty();
+    });
+    connect(worker, &QObject::destroyed, thread, &QObject::deleteLater);
+    // Business logic
+    connect(thread, &QThread::started, worker, &LoadWorker::doLoad);
+    connect(worker, &LoadWorker::loadCompleted, this,
+            &JsonTreeModel::onLoadCompleted);
+    worker->moveToThread(thread);
+    thread->start();
     return true;
 }
 
-void JsonTreeModel::loadEverything()
+void JsonTreeModel::onLoadCompleted(
+    std::shared_ptr<JsonTreeItem> root,
+    std::shared_ptr<JsonViewerStrategy> strategy,
+    bool success,
+    qint64 elapsedMs)
 {
-    QElapsedTimer et;
-    et.start();
+    if (!success) {
+        qprintt << "[LOAD ASYNC] Load failed";
+        emit loadFinished(false, elapsedMs);
+        return;
+    }
+
+    qprintt << "[LOAD ASYNC] Completed in" << elapsedMs << "ms";
+
+    // Update model in main thread
     beginResetModel();
-    std::function<void(JsonTreeItem*)> recursiveLoad
-        = [this, &recursiveLoad](JsonTreeItem* item) {
-              if (item->has_children && item->children.isEmpty()) {
-                  item->children = extractChildren(item);
-              }
-              for (JsonTreeItem* child : item->children) {
-                  recursiveLoad(child);
-              }
-          };
-    recursiveLoad(m_root_item);
+
+    m_root_item = nullptr;
+    m_root_shared.reset();
+    m_root_shared = root;        // Keep shared_ptr alive
+    m_root_item   = root.get();  // Raw pointer for quick access
+    m_strategy    = strategy;    // shared_ptr assignment keeps strategy alive
+
+    // Determine file mode based on strategy type
+    switch (strategy->type()) {
+    case StrategyType::Small:
+        m_file_mode = FileMode::Small;
+        break;
+    case StrategyType::Medium:
+        m_file_mode = FileMode::Medium;
+        break;
+    case StrategyType::Large:
+        m_file_mode = FileMode::Large;
+        break;
+    case StrategyType::Extreme:
+        m_file_mode = FileMode::Extreme;
+        break;
+    }
+
     endResetModel();
-    qprintt << "loadEverything" << et.elapsed() << "ms";
+
+    qprintt << "=== [LOAD END] Total time:" << elapsedMs << "ms ===";
+    emit loadFinished(true, elapsedMs);
 }
 
 QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
@@ -238,7 +219,21 @@ int JsonTreeModel::columnCount(const QModelIndex&) const
 bool JsonTreeModel::canFetchMore(const QModelIndex& parent) const
 {
     JsonTreeItem* item = getItem(parent);
-    return item && item->has_children && item->children.isEmpty();
+    if (!item || !item->has_children) {
+        return false;
+    }
+    if (!m_strategy) {
+        return false;
+    }
+
+    // Critical: if already fetching, return false to avoid duplicate triggers
+    if (m_fetching_items.contains(item)) {
+        // qprintt << "[canFetchMore] Already fetching:" << item->key;
+        return false;
+    }
+
+    // Only unfetched and not-currently-fetching items can fetch
+    return item->children.isEmpty();
 }
 
 void JsonTreeModel::fetchMore(const QModelIndex& parent)
@@ -246,16 +241,24 @@ void JsonTreeModel::fetchMore(const QModelIndex& parent)
     if (!canFetchMore(parent)) {
         return;
     }
-    JsonTreeItem* item             = getItem(parent);
-    const auto old_t               = item->children.size();
-    QList<JsonTreeItem*> new_items = extractChildren(item);
-    const auto insert_t            = new_items.size();
-    if (insert_t > 0) {
-        beginInsertRows(parent, old_t, old_t + insert_t - 1);
-        item->children.append(new_items);
-        item->children_loaded = true;
-        endInsertRows();
+
+    JsonTreeItem* item = getItem(parent);
+    if (!item || !item->has_children) {
+        qprint_err;
+        return;
     }
+
+    qprintt << "=== [FETCH START ASYNC] ===" << item->key
+            << "offset:" << item->byte_offset;
+
+    beginInsertRows(parent, 0, 0);
+    auto* loadingItem   = new JsonTreeItem("Loading...", "", 0);
+    loadingItem->parent = item;
+    item->children.append(loadingItem);
+    endInsertRows();
+
+    qprintt << "[FETCH] Loading placeholder inserted";
+    fetchMoreAsync(parent);
 }
 
 JsonTreeItem* JsonTreeModel::getItem(const QModelIndex& index) const
@@ -272,15 +275,26 @@ QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
         return {};
 
     if (parent_item->is_virtual_page) {
-        if (!parent_item->children.isEmpty())
+        // Check if already loaded (ignore "Loading..." placeholder)
+        bool hasRealChildren = false;
+        for (const auto* child : parent_item->children) {
+            if (child->key != "Loading...") {
+                hasRealChildren = true;
+                break;
+            }
+        }
+        if (hasRealChildren)
             return {};
+
         JsonTreeItem* actual_parent = parent_item->parent;
         if (!actual_parent || !m_strategy)
             return {};
 
         // Pass range directly to strategy: O(page_size), not O(N).
         QVector<JsonTreeItem*> page_children = m_strategy->extractChildren(
-            actual_parent, parent_item->page_start, parent_item->page_end);
+            actual_parent->pointer, actual_parent->byte_offset,
+            actual_parent->byte_length, parent_item->page_start,
+            parent_item->page_end);
 
         for (JsonTreeItem* child : page_children)
             child->parent = parent_item;
@@ -288,7 +302,15 @@ QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
         return page_children;
     }
 
-    if (!parent_item->children.isEmpty())
+    // Check if already loaded (ignore "Loading..." placeholder)
+    bool hasRealChildren = false;
+    for (const auto* child : parent_item->children) {
+        if (child->key != "Loading...") {
+            hasRealChildren = true;
+            break;
+        }
+    }
+    if (hasRealChildren)
         return {};
 
     if (!m_strategy)
@@ -296,14 +318,18 @@ QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
 
     quint32 child_count = parent_item->child_count;
     if (child_count == 0 && parent_item->has_children) {
-        child_count              = m_strategy->countChildren(parent_item);
+        child_count = m_strategy->countChildren(parent_item->pointer,
+                                                parent_item->byte_offset,
+                                                parent_item->byte_length);
         parent_item->child_count = child_count;
     }
 
     if (needsPaging(child_count, m_file_mode))
         return createPagedChildren(parent_item, child_count);
 
-    return m_strategy->extractChildren(parent_item);
+    return m_strategy->extractChildren(parent_item->pointer,
+                                       parent_item->byte_offset,
+                                       parent_item->byte_length);
 }
 
 int JsonTreeModel::getPageSize(FileMode mode) const
@@ -470,13 +496,15 @@ QString JsonTreeModel::getKeyValue(const QModelIndex& index,
             QByteArray arr = tmp.toJson(QJsonDocument::Compact);
             // arr is ["value"], strip outer brackets
             valueStr = QString::fromUtf8(arr.mid(1, arr.size() - 2));
-        } else {
+        }
+        else {
             valueStr = item->value;
         }
-    } else {
+    }
+    else {
         QString subtreeErr;
         bool subtreeOk = false;
-        valueStr = getSubtree(index, &subtreeOk, &subtreeErr);
+        valueStr       = getSubtree(index, &subtreeOk, &subtreeErr);
         if (!subtreeOk) {
             if (errorMsg)
                 *errorMsg = subtreeErr;
@@ -567,4 +595,178 @@ QString JsonTreeModel::getSubtree(const QModelIndex& index,
     if (success)
         *success = true;
     return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+}
+
+void JsonTreeModel::fetchMoreAsync(const QModelIndex& parent)
+{
+    JsonTreeItem* item = getItem(parent);
+
+    // Check if already in queue or being processed
+    if (m_fetching_items.contains(item)) {
+        qprintt << "[FETCH ASYNC] Item already queued or processing:"
+                << item->key;
+        return;
+    }
+
+    // Mark as queued
+    m_fetching_items.insert(item);
+
+    // Add to queue
+    m_fetch_queue.enqueue({item, parent});
+    qprintt << "[FETCH ASYNC] Queued:" << item->key
+            << "Queue size:" << m_fetch_queue.size();
+
+    // Process queue (will start if no fetch is active)
+    processFetchQueue();
+}
+
+void JsonTreeModel::processFetchQueue()
+{
+    // Check if already processing
+    if (m_fetch_in_progress) {
+        qprintt << "[FETCH ASYNC] Fetch already in progress, will process "
+                   "queue later";
+        return;
+    }
+
+    // Get next item to process
+    if (m_fetch_queue.isEmpty()) {
+        qprintt << "[FETCH ASYNC] Queue empty, nothing to process";
+        return;
+    }
+
+    auto request       = m_fetch_queue.dequeue();
+    JsonTreeItem* item = request.item;
+    QModelIndex parent = request.parent;
+
+    qprintt << "[FETCH ASYNC] Processing:" << item->key
+            << "Queue size:" << m_fetch_queue.size();
+
+    // Mark as in progress
+    m_fetch_in_progress = true;
+
+    // Create background thread with no parent for true async cleanup
+    auto* thread = new JTVThread;
+    QPointer<FetchWorker> worker
+        = new FetchWorker(m_strategy, item->pointer, item->byte_offset,
+                          item->byte_length, item, parent);
+    connect(this, &QObject::destroyed, [worker, thread]() {
+        if (worker) {
+            qprintt
+                << "[FETCH ASYNC] Model destroyed, requesting worker to stop";
+            thread->requestInterruption();
+        }
+    });
+    connect(worker, &QObject::destroyed, thread, &QObject::deleteLater);
+    // Business logic
+    connect(thread, &QThread::started, worker, &FetchWorker::doFetch);
+    connect(worker, &FetchWorker::fetchCompleted, this,
+            &JsonTreeModel::onFetchCompleted);
+    connect(worker, &FetchWorker::progressUpdated, this,
+            &JsonTreeModel::onFetchProgress);
+    worker->moveToThread(thread);
+    thread->start();
+}
+
+void JsonTreeModel::onFetchCompleted(
+    std::shared_ptr<QVector<JsonTreeItem*>> children,
+    JsonTreeItem* parent_item,
+    const QModelIndex& parent_index,
+    qint64 elapsedMs)
+{
+    // Verify parent_item is still in our fetching set
+    if (!m_fetching_items.contains(parent_item)) {
+        qprintt << "[FETCH ASYNC] Parent item no longer in fetching set, "
+                   "discarding results";
+        return;
+    }
+
+    // Remove from fetching set first
+    m_fetching_items.remove(parent_item);
+
+    // Rebuild a valid QModelIndex from parent_item
+    // The old parent_index might be invalid if model was reset
+    QModelIndex valid_parent_index;
+    if (parent_item == m_root_item) {
+        valid_parent_index = QModelIndex();  // Root has invalid index
+    }
+    else {
+        // Find the row of parent_item in its parent's children
+        JsonTreeItem* grandparent = parent_item->parent;
+        if (grandparent) {
+            int row = grandparent->children.indexOf(parent_item);
+            if (row >= 0) {
+                valid_parent_index = createIndex(row, 0, parent_item);
+            }
+            else {
+                qprintt
+                    << "[FETCH ASYNC] Parent item not found in grandparent's "
+                       "children, discarding results";
+                cleanupFetchState();
+                processFetchQueue();
+                return;
+            }
+        }
+        else {
+            qprintt << "[FETCH ASYNC] Parent item has no grandparent, "
+                       "discarding results";
+            cleanupFetchState();
+            processFetchQueue();
+            return;
+        }
+    }
+
+    qprintt << "[FETCH ASYNC] Completed:" << parent_item->key << "in"
+            << elapsedMs << "ms," << children->size() << "items";
+
+    // Remove "Loading..." placeholder if exists
+    if (!parent_item->children.isEmpty()
+        && parent_item->children.first()->isLoadingPlaceholder()) {
+        beginRemoveRows(valid_parent_index, 0, 0);
+        delete parent_item->children.takeFirst();
+        endRemoveRows();
+    }
+
+    // Insert actual children
+    int count = children->size();
+    if (count > 0) {
+        beginInsertRows(valid_parent_index, 0, count - 1);
+
+        // Set parent relationship
+        for (auto* child : *children) {
+            child->parent = parent_item;
+        }
+        parent_item->children        = *children;
+        parent_item->children_loaded = true;
+
+        // Model 已经"认领"了这些指针，现在它们由 parent->children 管理
+        // 清空后，当 shared_ptr 析构时，自定义删除器看到的是空容器
+        // 不会误删已经交给 Model 管理的节点
+        children->clear();
+
+        endInsertRows();
+    }
+
+    // Cleanup current fetch
+    cleanupFetchState();
+    // Process next item in queue
+    processFetchQueue();
+}
+
+void JsonTreeModel::onFetchProgress(int dotCount, int unused)
+{
+    Q_UNUSED(dotCount);
+    Q_UNUSED(unused);
+    // Progress updates from worker - currently not used for animation
+    // Could be used to update "Loading..." text in the future
+}
+
+void JsonTreeModel::cleanupFetchState()
+{
+    qprintt << "[FETCH ASYNC] Cleaning up fetch state";
+
+    // Clear in-progress flag
+    m_fetch_in_progress = false;
+
+    // Note: Don't clear m_fetching_items here, items are removed when dequeued
 }

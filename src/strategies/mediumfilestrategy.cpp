@@ -1,7 +1,5 @@
 #include "mediumfilestrategy.h"
 
-#include <QDebug>
-
 #include "../jsonnode.h"
 #include "../logging.h"
 
@@ -10,7 +8,7 @@
 MediumFileStrategy::MediumFileStrategy()  = default;
 MediumFileStrategy::~MediumFileStrategy() = default;
 
-bool MediumFileStrategy::load(const QString& path)
+bool MediumFileStrategy::initialize(const QString& path)
 {
     qprintt << "Loading medium file:" << path;
     auto result = simdjson::padded_string::load(path.toUtf8().data());
@@ -19,18 +17,36 @@ bool MediumFileStrategy::load(const QString& path)
         return false;
     }
     m_json_data = std::move(result.value());
+    qprintt << "Loaded" << m_json_data.size() << "bytes";
     return true;
 }
 
-QVector<JsonTreeItem*> MediumFileStrategy::extractChildren(
-    JsonTreeItem* parent_item, int start, int end)
+void MediumFileStrategy::getRootMetadata(QString& pointer,
+                                         quint64& byte_offset,
+                                         quint64& byte_length,
+                                         quint32& child_count)
 {
-    return parseLocalBuffer(parent_item, dataPtr(), dataSize(), start, end);
+    pointer     = "";  // Root pointer is empty string per RFC 6901
+    byte_offset = 0;
+    byte_length = m_json_data.size();
+    child_count = countLocalBufferChildren(dataPtr(), dataSize());
 }
 
-quint32 MediumFileStrategy::countChildren(JsonTreeItem* parent_item)
+QVector<JsonTreeItem*> MediumFileStrategy::extractChildren(
+    const QString& parent_pointer,
+    quint64 byte_offset,
+    quint64 byte_length,
+    int start,
+    int end)
 {
-    return countLocalBufferChildren(parent_item, dataPtr(), dataSize());
+    return parseLocalBuffer(parent_pointer, dataPtr(), dataSize(), start, end);
+}
+
+quint32 MediumFileStrategy::countChildren(const QString& parent_pointer,
+                                          quint64 byte_offset,
+                                          quint64 byte_length)
+{
+    return countLocalBufferChildren(dataPtr(), dataSize());
 }
 
 const char* MediumFileStrategy::dataPtr() const

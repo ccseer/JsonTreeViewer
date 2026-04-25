@@ -1,13 +1,12 @@
 #pragma once
 
-#include <simdjson.h>
-
+#include <QQueue>
 #include <QSortFilterProxyModel>
-#include <memory>
 
 #include "strategies/jsonstrategy.h"
 
 class JsonTreeItem;
+class JTVThread;
 
 class JsonTreeModel : public QAbstractItemModel {
     Q_OBJECT
@@ -20,11 +19,13 @@ public:
     explicit JsonTreeModel(QObject* parent = nullptr);
     ~JsonTreeModel() override;
 
-    static QString toEscaped(const QString& key);
     bool load(const QString& path);
-    void loadEverything();
+    Q_SIGNAL void loadFinished(bool success, qint64 elapsedMs);
 
-    FileMode fileMode() const { return m_file_mode; }
+    FileMode fileMode() const
+    {
+        return m_file_mode;
+    }
 
     CopyActions supportedActions() const
     {
@@ -60,8 +61,24 @@ public:
                        bool* success     = nullptr,
                        QString* errorMsg = nullptr) const;
 
+private slots:
+    // Slots for receiving data from background workers
+    void onLoadCompleted(std::shared_ptr<JsonTreeItem> root,
+                         std::shared_ptr<JsonViewerStrategy> strategy,
+                         bool success,
+                         qint64 elapsedMs);
+
+    void onFetchCompleted(std::shared_ptr<QVector<JsonTreeItem*>> children,
+                          JsonTreeItem* parent_item,
+                          const QModelIndex& parent_index,
+                          qint64 elapsedMs);
+
+    void onFetchProgress(int dotCount, int unused);
+
 private:
     JsonTreeItem* getItem(const QModelIndex& index) const;
+
+    // Helper method for extracting children (used by loadEverything)
     QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item);
 
     // Paging support
@@ -70,8 +87,26 @@ private:
     QVector<JsonTreeItem*> createPagedChildren(JsonTreeItem* parent_item,
                                                int total_children);
 
+    // Async fetchMore support - single thread with queue
+    // Items currently being fetched or queued
+    QSet<JsonTreeItem*> m_fetching_items;
+    bool m_fetch_in_progress = false;  // Is a fetch currently running?
+
+    struct FetchRequest {
+        JsonTreeItem* item;
+        QModelIndex parent;
+    };
+    QQueue<FetchRequest> m_fetch_queue;  // Queue of pending requests
+
+    void fetchMoreAsync(const QModelIndex& parent);
+    void processFetchQueue();  // Process next item in queue
+    void cleanupFetchState();
+
     JsonTreeItem* m_root_item;
-    std::unique_ptr<JsonViewerStrategy> m_strategy;
+    // Keep root alive via shared_ptr
+    std::shared_ptr<JsonTreeItem> m_root_shared;
+    // shared_ptr for thread safety
+    std::shared_ptr<JsonViewerStrategy> m_strategy;
     FileMode m_file_mode;
 
     // Legacy members - will be removed after full strategy integration

@@ -123,3 +123,47 @@ if __name__ == "__main__":
 
     for filename, size in configs:
         generate_json_file(filename, size)
+
+    # Phase 13: Async loading test files
+    print("\n=== Generating Phase 13 test files ===")
+
+    # Determine project root (parent of tests directory)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # test_100k_array.json - 100k element array
+    print("Generating test_100k_array.json (100,000 elements)...")
+    data = [{"id": i, "name": f"item_{i}", "value": i * 2} for i in range(100000)]
+    test_file = os.path.join(project_root, "test_100k_array.json")
+    with open(test_file, "w") as f:
+        json.dump(data, f)
+    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+
+    # test_100k_object.json - 100k field object
+    print("Generating test_100k_object.json (100,000 fields)...")
+    data = {f"key_{i}": {"id": i, "value": i * 2} for i in range(100000)}
+    test_file = os.path.join(project_root, "test_100k_object.json")
+    with open(test_file, "w") as f:
+        json.dump(data, f)
+    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+
+    # test_nested.json - deeply nested structure
+    print("Generating test_nested.json (100 levels of nesting)...")
+    data = {"level": 0}
+    current = data
+    for i in range(1, 100):
+        current["child"] = {"level": i}
+        current = current["child"]
+    test_file = os.path.join(project_root, "test_nested.json")
+    with open(test_file, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+
+    # test_empty.json - empty object
+    print("Generating test_empty.json (empty object)...")
+    test_file = os.path.join(project_root, "test_empty.json")
+    with open(test_file, "w") as f:
+        json.dump({}, f)
+    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+
+    print("\n=== All test files generated successfully ===")
+

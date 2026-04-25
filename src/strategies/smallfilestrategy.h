@@ -9,14 +9,29 @@ public:
     SmallFileStrategy();
     ~SmallFileStrategy() override;
 
-    bool load(const QString& path) override;
-    QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item,
+    StrategyType type() const override { return StrategyType::Small; }
+
+    bool initialize(const QString& path) override;
+
+    void getRootMetadata(QString& pointer,
+                         quint64& byte_offset,
+                         quint64& byte_length,
+                         quint32& child_count) override;
+
+    QVector<JsonTreeItem*> extractChildren(const QString& parent_pointer,
+                                           quint64 byte_offset,
+                                           quint64 byte_length,
                                            int start = -1,
                                            int end   = -1) override;
-    quint32 countChildren(JsonTreeItem* parent_item) override;
+
+    quint32 countChildren(const QString& parent_pointer,
+                          quint64 byte_offset,
+                          quint64 byte_length) override;
+
     const char* dataPtr() const override;
     size_t dataSize() const override;
     const Metrics& metrics() const override;
+
     CopyActions supportedActions() const override
     {
         return CopyAction::Key | CopyAction::Value | CopyAction::Path
