@@ -412,7 +412,7 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
 
     connect(
         model, &JsonTreeModel::loadFinished, this,
-        [this, model](bool success, qint64 elapsedMs) {
+        [this, model, path](bool success, qint64 elapsedMs) {
             qprintt << "[BG LOAD] loadFinished received";
 
             // Record load time
@@ -440,22 +440,74 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
                 m_statusbar.info->setAlignment(Qt::AlignCenter);
 
                 QStringList tooltipLines;
-                // First line: load time
-                tooltipLines << tr("Loaded in %1s")
-                                    .arg(m_load_time_ms / 1000.0, 0, 'f', 2);
 
-                // Add file mode specific info
+                // Performance metrics
+                tooltipLines << tr("=== Performance Metrics ===");
+                tooltipLines << tr("Load time: %1s")
+                                    .arg(m_load_time_ms / 1000.0, 0, 'f', 3);
+
+                // File information
+                QFileInfo fileInfo(path);
+                qint64 fileSize = fileInfo.size();
+                QString fileSizeStr;
+                if (fileSize < 1024) {
+                    fileSizeStr = tr("%1 B").arg(fileSize);
+                }
+                else if (fileSize < 1024 * 1024) {
+                    fileSizeStr = tr("%1 KB").arg(fileSize / 1024.0, 0, 'f', 2);
+                }
+                else if (fileSize < 1024 * 1024 * 1024) {
+                    fileSizeStr = tr("%1 MB").arg(fileSize / 1024.0 / 1024.0, 0,
+                                                  'f', 2);
+                }
+                else {
+                    fileSizeStr = tr("%1 GB").arg(
+                        fileSize / 1024.0 / 1024.0 / 1024.0, 0, 'f', 2);
+                }
+                tooltipLines << tr("File size: %1").arg(fileSizeStr);
+
+                // Strategy information
                 using FM = FileMode;
+                QString strategyName;
+                bool usesMmap = false;
+                switch (model->fileMode()) {
+                case FM::Small:
+                    strategyName = "Small";
+                    break;
+                case FM::Medium:
+                    strategyName = "Medium";
+                    break;
+                case FM::Large:
+                    strategyName = "Large";
+                    usesMmap     = true;
+                    break;
+                case FM::Extreme:
+                    strategyName = "Extreme";
+                    usesMmap     = true;
+                    break;
+                }
+                tooltipLines << tr("Strategy: %1").arg(strategyName);
+                if (usesMmap) {
+                    tooltipLines << tr("Memory mapping: Enabled");
+                }
+
+                // Add file mode specific limitations
+                tooltipLines << "";
+                tooltipLines << tr("=== Feature Availability ===");
                 if (model->fileMode() == FM::Extreme) {
+                    tooltipLines << tr("✓ Copy Key/Value");
                     tooltipLines
-                        << "" << tr("Extreme file (>1 GB):")
-                        << tr("• Only Key/Value copy supported")
-                        << tr("• Path and Subtree operations disabled");
+                        << tr("✗ Copy Path (disabled for extreme files)");
+                    tooltipLines
+                        << tr("✗ Copy Subtree (disabled for extreme files)");
                 }
                 else if (model->fileMode() == FM::Large) {
-                    tooltipLines << "" << tr("Large file (>100 MB):")
-                                 << tr("• Path copy supported")
-                                 << tr("• Subtree and Key:Value copy disabled");
+                    tooltipLines << tr("✓ Copy Key/Value/Path");
+                    tooltipLines
+                        << tr("✗ Copy Subtree (disabled for large files)");
+                }
+                else {
+                    tooltipLines << tr("✓ All copy operations available");
                 }
 
                 m_statusbar.info->setToolTip(tooltipLines.join("\n"));
