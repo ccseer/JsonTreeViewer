@@ -25,8 +25,10 @@ signals:
     void copyKeyRequested(const QModelIndex& index);
     void copyValueRequested(const QModelIndex& index);
     void copyPathRequested(const QModelIndex& index);
+    void copyDotPathRequested(const QModelIndex& index);
     void copyKeyValueRequested(const QModelIndex& index);
     void copySubtreeRequested(const QModelIndex& index);
+    void exportSelectionRequested(const QModelIndex& index);
 
 private:
     bool m_firstResize = true;

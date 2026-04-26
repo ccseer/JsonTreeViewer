@@ -61,12 +61,16 @@ public:
     QString getKey(const QModelIndex& index) const;
     QString getValue(const QModelIndex& index) const;
     QString getPath(const QModelIndex& index) const;
+    QString getDotPath(const QModelIndex& index) const;
     QString getKeyValue(const QModelIndex& index,
                         bool* success     = nullptr,
                         QString* errorMsg = nullptr) const;
     QString getSubtree(const QModelIndex& index,
                        bool* success     = nullptr,
                        QString* errorMsg = nullptr) const;
+
+    // Get item from index (for internal use by viewer)
+    JsonTreeItem* getItem(const QModelIndex& index) const;
 
 private slots:
     // Slots for receiving data from background workers
@@ -83,8 +87,6 @@ private slots:
     void onFetchProgress(int dotCount, int unused);
 
 private:
-    JsonTreeItem* getItem(const QModelIndex& index) const;
-
     // Paging support
     int getPageSize(FileMode mode) const;
     bool needsPaging(int child_count, FileMode mode) const;

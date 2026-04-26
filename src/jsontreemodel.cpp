@@ -403,6 +403,63 @@ QString JsonTreeModel::getPath(const QModelIndex& index) const
     return item ? item->pointer : QString();
 }
 
+QString JsonTreeModel::getDotPath(const QModelIndex& index) const
+{
+    if (!index.isValid()) {
+        return QString();
+    }
+
+    JsonTreeItem* item = getItem(index);
+    if (!item) {
+        return QString();
+    }
+
+    // Build dot path by traversing up the tree
+    QStringList parts;
+    JsonTreeItem* current = item;
+
+    while (current && current != m_root_item) {
+        if (current->is_virtual_page) {
+            // Skip virtual page nodes
+            current = current->parent;
+            continue;
+        }
+
+        QString key = current->key;
+
+        // Check if parent is an array
+        if (current->parent && current->parent != m_root_item
+            && current->parent->type == '[') {
+            // Array element: use [index] notation
+            parts.prepend(QString("[%1]").arg(key));
+        }
+        else if (!key.isEmpty()) {
+            // Object property: use dot notation
+            // Escape key if it contains special characters
+            if (key.contains('.') || key.contains('[') || key.contains(']')
+                || key.contains(' ')) {
+                parts.prepend(QString("[\"%1\"]").arg(key));
+            }
+            else {
+                parts.prepend(key);
+            }
+        }
+
+        current = current->parent;
+    }
+
+    // Join with dots, but handle [index] specially
+    QString result;
+    for (int i = 0; i < parts.size(); ++i) {
+        if (i > 0 && !parts[i].startsWith('[')) {
+            result += '.';
+        }
+        result += parts[i];
+    }
+
+    return result;
+}
+
 QString JsonTreeModel::getKeyValue(const QModelIndex& index,
                                    bool* success,
                                    QString* errorMsg) const

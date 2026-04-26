@@ -3,11 +3,14 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QDateTime>
+#include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QStandardPaths>
 #include <QTimer>
 
+#include "jsonnode.h"
 #include "jsontreemodel.h"
 #include "jsontreeview.h"
 #include "loadworker.h"
@@ -202,6 +205,17 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                     QApplication::clipboard()->setText(path);
             });
 
+    connect(m_view, &JsonTreeView::copyDotPathRequested, this,
+            [this, m](const QModelIndex& proxyIndex) {
+                auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                if (!proxy)
+                    return;
+                QString dotPath = m->getDotPath(proxy->mapToSource(proxyIndex));
+                if (!dotPath.isEmpty())
+                    QApplication::clipboard()->setText(dotPath);
+            });
+
     connect(
         m_view, &JsonTreeView::copySubtreeRequested, this,
         [this, m](const QModelIndex& proxyIndex) {
@@ -239,6 +253,84 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                                 tr("Copy Key:Value Failed") + "\n" + errorMsg);
             }
         });
+
+    connect(m_view, &JsonTreeView::exportSelectionRequested, this,
+            [this, m](const QModelIndex& proxyIndex) {
+                auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                if (!proxy)
+                    return;
+
+                // Get the source model index and item
+                QModelIndex srcIndex = proxy->mapToSource(proxyIndex);
+                JsonTreeItem* item   = m->getItem(srcIndex);
+                if (!item) {
+                    emit sigCommand(
+                        ViewCommandType::VCT_ShowToastMsg,
+                        tr("Export Failed") + "\n" + tr("Invalid item"));
+                    return;
+                }
+
+                // Check size limit BEFORE extracting to avoid wasting time
+                // item->byte_length contains the total size of this node and
+                // all its children in the original JSON file
+                constexpr quint64 MAX_SIZE = 10 * 1024 * 1024;  // 10 MB limit
+                if (item->byte_length > MAX_SIZE) {
+                    emit sigCommand(
+                        ViewCommandType::VCT_ShowToastMsg,
+                        tr("Export Failed") + "\n"
+                            + tr("Subtree too large (%1 MB). Maximum allowed "
+                                 "is 10 MB.")
+                                  .arg(item->byte_length / (1024.0 * 1024.0), 0,
+                                       'f', 2));
+                    return;
+                }
+
+                // Extract the subtree as JSON string
+                bool success = false;
+                QString errorMsg;
+                QString subtree = m->getSubtree(srcIndex, &success, &errorMsg);
+                if (!success) {
+                    emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                    tr("Export Failed") + "\n" + errorMsg);
+                    return;
+                }
+
+                // Generate filename with timestamp:
+                // Seer-JsonTreeViewer-YYYYMMDD-HHMMSS.json
+                QString timestamp
+                    = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+                QString filename
+                    = QString("Seer-JsonTreeViewer-%1.json").arg(timestamp);
+
+                // Get system downloads folder (fallback to home if not
+                // available)
+                QString downloadsPath = QStandardPaths::writableLocation(
+                    QStandardPaths::DownloadLocation);
+                if (downloadsPath.isEmpty()) {
+                    downloadsPath = QStandardPaths::writableLocation(
+                        QStandardPaths::HomeLocation);
+                }
+
+                QString filePath = downloadsPath + "/" + filename;
+
+                // Write JSON to file
+                QFile file(filePath);
+                if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    emit sigCommand(
+                        ViewCommandType::VCT_ShowToastMsg,
+                        tr("Export Failed") + "\n"
+                            + tr("Cannot write to file: %1").arg(filePath));
+                    return;
+                }
+
+                file.write(subtree.toUtf8());
+                file.close();
+
+                // Show success message with file path
+                emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                tr("Exported to:\n%1").arg(filePath));
+            });
 
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();

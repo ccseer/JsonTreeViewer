@@ -36,11 +36,15 @@ public:
     char type;
     bool has_children;
 
-    // Byte offset caching for performance
-    quint64 byte_offset;   // Node's byte offset in file
-    quint64 byte_length;   // Node's byte length
-    quint32 child_count;   // Number of children (for paging)
-    bool children_loaded;  // Whether children have been loaded
+    // Byte offset and length caching for performance
+    quint64 byte_offset;  // Starting byte position of this node in the original
+                          // JSON file
+    quint64 byte_length;  // Total byte length of this node INCLUDING all its
+                          // children in the original JSON Example: for {"a":
+                          // {"b": 1}}, the byte_length of "a" includes the
+                          // entire {"b": 1} subtree
+    quint32 child_count;   // Number of direct children (for paging decisions)
+    bool children_loaded;  // Whether children have been loaded from disk/parsed
 
     // Virtual paging support
     bool is_virtual_page = false;  // Is this a virtual page node?

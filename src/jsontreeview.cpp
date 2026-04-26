@@ -37,8 +37,10 @@ void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
     QAction* copyKeyAction      = nullptr;
     QAction* copyValueAction    = nullptr;
     QAction* copyPathAction     = nullptr;
+    QAction* copyDotPathAction  = nullptr;
     QAction* copyKeyValueAction = nullptr;
     QAction* copySubtreeAction  = nullptr;
+    QAction* exportAction       = nullptr;
 
     if (m_copyActions & CA::Key)
         copyKeyAction = menu.addAction(tr("Copy Key"));
@@ -46,11 +48,20 @@ void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
         copyValueAction = menu.addAction(tr("Copy Value"));
     if (m_copyActions & CA::Path)
         copyPathAction = menu.addAction(tr("Copy Path (JSON Pointer)"));
+
+    // Always show Dot Path (JavaScript style)
+    copyDotPathAction = menu.addAction(tr("Copy Dot Path"));
+
     if (m_copyActions & CA::KeyValue)
         copyKeyValueAction = menu.addAction(tr("Copy Key:Value"));
+
     menu.addSeparator();
+
     if (m_copyActions & CA::Subtree)
         copySubtreeAction = menu.addAction(tr("Copy Subtree"));
+
+    // Always show Export
+    exportAction = menu.addAction(tr("Export Selection to File"));
 
     QAction* selected = menu.exec(event->globalPos());
     if (!selected)
@@ -62,10 +73,14 @@ void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
         emit copyValueRequested(index);
     else if (selected == copyPathAction)
         emit copyPathRequested(index);
+    else if (selected == copyDotPathAction)
+        emit copyDotPathRequested(index);
     else if (selected == copyKeyValueAction)
         emit copyKeyValueRequested(index);
     else if (selected == copySubtreeAction)
         emit copySubtreeRequested(index);
+    else if (selected == exportAction)
+        emit exportSelectionRequested(index);
 }
 
 void JsonTreeView::resizeEvent(QResizeEvent* event)
