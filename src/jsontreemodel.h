@@ -68,15 +68,18 @@ public:
     QString getValue(const QModelIndex& index) const;
     QString getPath(const QModelIndex& index) const;
     QString getDotPath(const QModelIndex& index) const;
-    QString getKeyValue(const QModelIndex& index,
+    QString getKeyValue(const QModelIndex& idx,
                         bool* success     = nullptr,
                         QString* errorMsg = nullptr) const;
-    QString getSubtree(const QModelIndex& index,
+    QString getSubtree(const QModelIndex& idx,
                        bool* success     = nullptr,
                        QString* errorMsg = nullptr) const;
 
     // Get item from index (for internal use by viewer)
     JsonTreeItem* getItem(const QModelIndex& index) const;
+
+    // Design cache
+    void refreshDesign();
 
 private slots:
     // Slots for receiving data from background workers
@@ -135,7 +138,7 @@ private:
     simdjson::ondemand::document m_doc;
 
     // Design cache
-    void refreshDesign();
+private:
     QIcon m_objIcon;
     QIcon m_arrIcon;
     bool m_isDarkMode = false;

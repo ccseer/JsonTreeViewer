@@ -10,6 +10,7 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(test_strategies
     test_strategies.cpp
     ../src/jsontreemodel.cpp
+    ../src/config.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -23,6 +24,7 @@ add_executable(test_strategies
 target_include_directories(test_strategies PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
 )
 
 target_link_libraries(test_strategies PRIVATE
@@ -46,6 +48,7 @@ set_tests_properties(StrategyTests PROPERTIES
 add_executable(test_paging
     test_paging.cpp
     ../src/jsontreemodel.cpp
+    ../src/config.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -59,6 +62,7 @@ add_executable(test_paging
 target_include_directories(test_paging PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
 )
 
 target_link_libraries(test_paging PRIVATE
@@ -81,6 +85,7 @@ set_tests_properties(PagingTests PROPERTIES
 add_executable(test_copy
     test_copy.cpp
     ../src/jsontreemodel.cpp
+    ../src/config.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -94,6 +99,7 @@ add_executable(test_copy
 target_include_directories(test_copy PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
 )
 
 target_link_libraries(test_copy PRIVATE
@@ -116,6 +122,7 @@ set_tests_properties(CopyTests PROPERTIES
 add_executable(test_async_loading
     test_async_loading.cpp
     ../src/jsontreemodel.cpp
+    ../src/config.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -129,6 +136,7 @@ add_executable(test_async_loading
 target_include_directories(test_async_loading PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
 )
 
 target_link_libraries(test_async_loading PRIVATE
@@ -151,6 +159,7 @@ set_tests_properties(AsyncLoadingTests PROPERTIES
 add_executable(test_string_parsing
     test_string_parsing.cpp
     ../src/jsontreemodel.cpp
+    ../src/config.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -164,6 +173,7 @@ add_executable(test_string_parsing
 target_include_directories(test_string_parsing PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
 )
 
 target_link_libraries(test_string_parsing PRIVATE
@@ -186,6 +196,7 @@ set_tests_properties(StringParsingTests PROPERTIES
 add_executable(test_errors
     test_errors.cpp
     ../src/jsontreemodel.cpp
+    ../src/config.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -199,6 +210,7 @@ add_executable(test_errors
 target_include_directories(test_errors PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
 )
 
 target_link_libraries(test_errors PRIVATE

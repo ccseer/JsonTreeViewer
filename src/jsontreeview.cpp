@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include "config.h"
 #include "jsonnode.h"
 #include "jsontreedelegate.h"
 #include "jsontreemodel.h"
@@ -105,24 +106,12 @@ JsonTreeView::JsonTreeView(QWidget* parent) : QTreeView(parent)
     setAnimated(false);
     setContextMenuPolicy(Qt::DefaultContextMenu);
     header()->setStretchLastSection(true);
+    header()->setVisible(Config::instance().showHeader());
+    setExpandsOnDoubleClick(Config::instance().doubleClickExpand());
+    setRootIsDecorated(Config::instance().showBranches());
 
     // Set custom delegate for handling selected item colors
     setItemDelegate(new JsonTreeDelegate(this));
-
-    // Add global shortcuts for collapse/expand all
-    QAction* collapseAction = new QAction(this);
-    collapseAction->setShortcut(QKeySequence("Ctrl+Shift+["));
-    connect(collapseAction, &QAction::triggered, this,
-            &JsonTreeView::collapseAllRequested);
-    addAction(collapseAction);
-
-    QAction* expandAction = new QAction(this);
-    expandAction->setShortcut(QKeySequence("Ctrl+Shift+]"));
-    connect(expandAction, &QAction::triggered, this, [this]() {
-        if (m_file_mode == FileMode::Small)
-            emit expandAllRequested();
-    });
-    addAction(expandAction);
 }
 
 void JsonTreeView::setModel(QAbstractItemModel* model)
@@ -231,14 +220,14 @@ void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
 
     // Common Tree Control Actions (shown for both empty space and items)
     QAction* collapseAllAction = menu.addAction(tr("Collapse All"));
-    collapseAllAction->setShortcut(QKeySequence("Ctrl+Shift+["));
+    collapseAllAction->setShortcut(Config::instance().shortcutCollapseAll());
     connect(collapseAllAction, &QAction::triggered, this,
             &JsonTreeView::collapseAllRequested);
 
     // Only show Expand All for Small files
     if (m_file_mode == FileMode::Small) {
         QAction* expandAllAction = menu.addAction(tr("Expand All"));
-        expandAllAction->setShortcut(QKeySequence("Ctrl+Shift+]"));
+        expandAllAction->setShortcut(Config::instance().shortcutExpandAll());
         connect(expandAllAction, &QAction::triggered, this,
                 &JsonTreeView::expandAllRequested);
     }
@@ -262,6 +251,10 @@ void JsonTreeView::drawBranches(QPainter* painter,
 {
     // 1. Call base class first so it can draw arrows/background
     QTreeView::drawBranches(painter, rect, index);
+
+    if (!Config::instance().showBranches()) {
+        return;
+    }
 
     // 2. Draw subtle vertical guide lines ON TOP
     painter->save();

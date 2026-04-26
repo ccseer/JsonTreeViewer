@@ -4,6 +4,7 @@
 #include <QThread>
 #include <limits>
 
+#include "../config.h"
 #include "../jsonnode.h"
 #include "extremefilestrategy.h"
 #include "largefilestrategy.h"
@@ -76,6 +77,7 @@ QPair<char, QString> typeAndPreviewFromRaw(const char* data_ptr,
         return {'b', QString::fromUtf8(data_ptr + offset, length)};
     if (first == 'n')
         return {'N', "null"};
+
     return {'n', QString::fromUtf8(data_ptr + offset, length)};
 }
 
@@ -227,10 +229,16 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                     len = raw_tok.size();
                 }
 
-                auto [vt, vp]   = typeAndPreviewFromRaw(base_ptr, abs_off, len);
-                QString idx_str = QString::number(idx);
-                auto* item      = new JsonTreeItem(
-                    idx_str, parent_pointer + "/" + idx_str, vt, vp,
+                auto [vt, vp] = typeAndPreviewFromRaw(base_ptr, abs_off, len);
+                // Display index (may start from 1 if configured)
+                int display_idx
+                    = idx
+                      + (Config::instance().arrayIndexStartsAtZero() ? 0 : 1);
+                QString idx_str = QString::number(display_idx);
+                // JSON Pointer always uses actual index (0-based)
+                auto* item = new JsonTreeItem(
+                    idx_str, parent_pointer + "/" + QString::number(idx), vt,
+                    vp,
                     nullptr);  // parent will be set by caller
                 item->has_children = hasChildren(vt);
                 item->byte_offset  = abs_off;
@@ -652,9 +660,17 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                             }
                             auto [vt, vp]
                                 = typeAndPreviewFromRaw(base_ptr, abs_off, len);
-                            QString idx_str = QString::number(idx);
-                            auto* item      = new JsonTreeItem(
-                                idx_str, "/" + idx_str, vt, vp, nullptr);
+                            // Display index (may start from 1 if configured)
+                            int display_idx
+                                = idx
+                                  + (Config::instance().arrayIndexStartsAtZero()
+                                         ? 0
+                                         : 1);
+                            QString idx_str = QString::number(display_idx);
+                            // JSON Pointer always uses actual index (0-based)
+                            auto* item = new JsonTreeItem(
+                                idx_str, "/" + QString::number(idx), vt, vp,
+                                nullptr);
                             item->has_children = hasChildren(vt);
                             item->byte_offset  = abs_off;
                             item->byte_length  = len;

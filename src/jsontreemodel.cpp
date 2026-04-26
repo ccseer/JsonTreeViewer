@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <memory>
 
+#include "config.h"
 #include "jsonnode.h"
 #include "loadworker.h"
 #include "strategies/jsonstrategy.h"
@@ -347,7 +348,8 @@ QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
             if (item->type == '[')
                 return m_arrIcon;
         }
-        else if (index.column() == CI_Value && item->type == 's') {
+        else if (index.column() == CI_Value && item->type == 's'
+                 && Config::instance().showColorPreview()) {
             // Color preview for string values that look like colors
             QColor color = parseColorValue(item->value);
             if (color.isValid()) {
@@ -713,20 +715,20 @@ QString JsonTreeModel::getDotPath(const QModelIndex& index) const
     return result;
 }
 
-QString JsonTreeModel::getKeyValue(const QModelIndex& index,
+QString JsonTreeModel::getKeyValue(const QModelIndex& idx,
                                    bool* success,
                                    QString* errorMsg) const
 {
     if (success)
         *success = false;
 
-    if (!index.isValid()) {
+    if (!idx.isValid()) {
         if (errorMsg)
             *errorMsg = "Invalid index";
         return QString();
     }
 
-    JsonTreeItem* item = getItem(index);
+    JsonTreeItem* item = getItem(idx);
     if (!item) {
         if (errorMsg)
             *errorMsg = "Invalid item";
@@ -760,7 +762,7 @@ QString JsonTreeModel::getKeyValue(const QModelIndex& index,
     else {
         QString subtreeErr;
         bool subtreeOk = false;
-        valueStr       = getSubtree(index, &subtreeOk, &subtreeErr);
+        valueStr       = getSubtree(idx, &subtreeOk, &subtreeErr);
         if (!subtreeOk) {
             if (errorMsg)
                 *errorMsg = subtreeErr;
@@ -773,20 +775,20 @@ QString JsonTreeModel::getKeyValue(const QModelIndex& index,
     return QString("\"%1\": %2").arg(item->key, valueStr);
 }
 
-QString JsonTreeModel::getSubtree(const QModelIndex& index,
+QString JsonTreeModel::getSubtree(const QModelIndex& idx,
                                   bool* success,
                                   QString* errorMsg) const
 {
     if (success)
         *success = false;
 
-    if (!index.isValid()) {
+    if (!idx.isValid()) {
         if (errorMsg)
             *errorMsg = "Invalid index";
         return QString();
     }
 
-    JsonTreeItem* item = getItem(index);
+    JsonTreeItem* item = getItem(idx);
     if (!item) {
         if (errorMsg)
             *errorMsg = "Invalid item";
@@ -812,22 +814,6 @@ QString JsonTreeModel::getSubtree(const QModelIndex& index,
         return QString();
     }
 
-    // Check if this is a scalar value (no children)
-    if (!item->has_children) {
-        if (success)
-            *success = true;
-        // Use getValue() to ensure we fetch the full string from strategy,
-        // not the truncated preview.
-        const QModelIndex modelIdx = index(
-            item->parent->children.indexOf(const_cast<JsonTreeItem*>(item)), 1,
-            parent(index(
-                item->parent->children.indexOf(const_cast<JsonTreeItem*>(item)),
-                1, QModelIndex())));
-        // Actually, just use getValue directly with current index if it's
-        // column 1
-        return getValue(index.sibling(index.row(), CI_Value));
-    }
-
     if (!m_strategy) {
         if (errorMsg)
             *errorMsg = "No strategy loaded";
@@ -847,11 +833,40 @@ QString JsonTreeModel::getSubtree(const QModelIndex& index,
 
     QByteArray jsonData(subtree_start, chunk);
 
-    // Skip QJsonDocument parsing for large subtrees to avoid performance
-    // overhead. The raw JSON from the memory-mapped file is already valid.
     if (success)
         *success = true;
-    return QString::fromUtf8(jsonData);
+
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(jsonData, &err);
+    if (err.error != QJsonParseError::NoError) {
+        return QString::fromUtf8(jsonData);
+    }
+
+    const auto& cfg = Config::instance();
+    if (cfg.exportFormat() == "compact") {
+        return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+    }
+
+    QByteArray result = doc.toJson(QJsonDocument::Indented);
+    int indentSpaces  = cfg.exportIndentSpaces();
+    if (indentSpaces == 4) {
+        return QString::fromUtf8(result);
+    }
+
+    // Manual indentation replacement for custom space count
+    QString str       = QString::fromUtf8(result);
+    QStringList lines = str.split('\n');
+    for (QString& line : lines) {
+        int spaceCount = 0;
+        while (spaceCount < line.length() && line[spaceCount] == ' ') {
+            spaceCount++;
+        }
+        if (spaceCount > 0 && spaceCount % 4 == 0) {
+            int levels = spaceCount / 4;
+            line.replace(0, spaceCount, QString(levels * indentSpaces, ' '));
+        }
+    }
+    return lines.join('\n');
 }
 
 void JsonTreeModel::fetchMoreAsync(const QModelIndex& parent)

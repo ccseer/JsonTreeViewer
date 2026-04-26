@@ -1,5 +1,6 @@
 #include "jsontreeviewer.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QClipboard>
 #include <QDateTime>
@@ -13,11 +14,13 @@
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QShortcut>
 #include <QStandardPaths>
 #include <QSvgRenderer>
 #include <QTimer>
 #include <QUrl>
 
+#include "config.h"
 #include "jsonnode.h"
 #include "jsontreemodel.h"
 #include "jsontreeview.h"
@@ -126,8 +129,8 @@ void JsonTreeViewer::updateDPR(qreal r)
     if (m_top.wnd_bg) {
         auto height_top = 30 * r;
         m_top.wnd_bg->setFixedHeight(height_top);
-        auto m = 9 * r;
-        m_top.wnd_bg->layout()->setContentsMargins(m, 0, m, 0);
+        auto ma = 9 * r;
+        m_top.wnd_bg->layout()->setContentsMargins(ma, 0, ma, 0);
         m_top.wnd_bg->layout()->setSpacing(0);
         m_top.filter->setFont(font);
         m_top.filter->setFixedHeight(height_top);
@@ -174,9 +177,14 @@ void JsonTreeViewer::updateDPR(qreal r)
 
 void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 {
+    const auto& cfg = Config::instance();
+
     initTopWnd();
     lay_content->setSpacing(0);
     lay_content->addWidget(m_top.wnd_bg);
+    if (!cfg.showFilterBar()) {
+        m_top.wnd_bg->hide();
+    }
 
     m_model = new JsonTreeModel(this);
 
@@ -191,7 +199,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     });
 
     m_view = new JsonTreeView(this);
-    m_view->setCopyActions(m->supportedActions());
+    m_view->setCopyActions(m_model->supportedActions());
     // Default to Small, will be updated after load
     m_view->setFileMode(FileMode::Small);
     m_view->setModel(proxy_model);
@@ -239,10 +247,54 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     statusLayout->addWidget(m_btm.info, 0);
 
     lay_content->addWidget(statusBarWidget);
+    if (!cfg.showStatusBar()) {
+        statusBarWidget->hide();
+    }
+
+    // Set up Shortcuts
+    auto* actionCollapseAll = new QAction(this);
+    actionCollapseAll->setShortcut(cfg.shortcutCollapseAll());
+    connect(actionCollapseAll, &QAction::triggered, m_view,
+            &JsonTreeView::collapseAll);
+    addAction(actionCollapseAll);
+
+    auto* actionExpandAll = new QAction(this);
+    actionExpandAll->setShortcut(cfg.shortcutExpandAll());
+    connect(actionExpandAll, &QAction::triggered, m_view,
+            &JsonTreeView::expandAll);
+    addAction(actionExpandAll);
+
+    auto* actionCopyPath = new QAction(this);
+    actionCopyPath->setShortcut(cfg.shortcutCopyPath());
+    connect(actionCopyPath, &QAction::triggered, this, [this]() {
+        QModelIndex current = m_view->currentIndex();
+        if (current.isValid()) {
+            emit m_view->copyPathRequested(current);
+        }
+    });
+    addAction(actionCopyPath);
+
+    auto* actionExportSelection = new QAction(this);
+    actionExportSelection->setShortcut(cfg.shortcutExportSelection());
+    connect(actionExportSelection, &QAction::triggered, this, [this]() {
+        QModelIndex current = m_view->currentIndex();
+        if (current.isValid()) {
+            emit m_view->exportSelectionRequested(current);
+        }
+    });
+    addAction(actionExportSelection);
+
+    if (cfg.showFilterBar()) {
+        auto* actionFilter = new QAction(this);
+        actionFilter->setShortcut(cfg.shortcutFilter());
+        connect(actionFilter, &QAction::triggered, m_top.filter,
+                qOverload<>(&QLineEdit::setFocus));
+        addAction(actionFilter);
+    }
 
     connect(
         m_view->selectionModel(), &QItemSelectionModel::currentChanged, this,
-        [this, m, proxy_model](const QModelIndex& current, const QModelIndex&) {
+        [this, proxy_model](const QModelIndex& current, const QModelIndex&) {
             // Clear existing breadcrumbs
             QLayoutItem* item;
             while ((item = m_btm.breadcrumbs_lay->takeAt(0)) != nullptr) {
@@ -281,7 +333,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                 }
 
                 QPushButton* btn = new QPushButton(
-                    m->getKey(proxy_model->mapToSource(hIdx)), this);
+                    m_model->getKey(proxy_model->mapToSource(hIdx)), this);
                 btn->setFlat(true);
                 btn->setCursor(Qt::PointingHandCursor);
                 // Premium feel: subtle hover color via stylesheet
@@ -300,7 +352,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 
             // Add value if present
             QModelIndex src = proxy_model->mapToSource(current);
-            QString val     = m->getValue(src);
+            QString val     = m_model->getValue(src);
             if (!val.isEmpty()) {
                 constexpr int MAX_VAL = 60;
                 if (val.length() > MAX_VAL)
@@ -311,59 +363,60 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 
     // Connect copy signals
     connect(m_view, &JsonTreeView::copyKeyRequested, this,
-            [this, m](const QModelIndex& proxyIndex) {
+            [this](const QModelIndex& proxyIndex) {
                 auto* proxy
                     = qobject_cast<TreeFilterProxyModel*>(m_view->model());
                 if (!proxy)
                     return;
-                QString key = m->getKey(proxy->mapToSource(proxyIndex));
+                QString key = m_model->getKey(proxy->mapToSource(proxyIndex));
                 if (!key.isEmpty())
                     QApplication::clipboard()->setText(key);
             });
 
-    connect(m_view, &JsonTreeView::copyValueRequested, this,
-            [this, m](const QModelIndex& proxyIndex) {
-                auto* proxy
-                    = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-                if (!proxy)
-                    return;
-                QString value = m->getValue(proxy->mapToSource(proxyIndex));
-                if (!value.isEmpty())
-                    QApplication::clipboard()->setText(value);
-            });
+    connect(
+        m_view, &JsonTreeView::copyValueRequested, this,
+        [this](const QModelIndex& proxyIndex) {
+            auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+            if (!proxy)
+                return;
+            QString value = m_model->getValue(proxy->mapToSource(proxyIndex));
+            if (!value.isEmpty())
+                QApplication::clipboard()->setText(value);
+        });
 
     connect(m_view, &JsonTreeView::copyPathRequested, this,
-            [this, m](const QModelIndex& proxyIndex) {
+            [this](const QModelIndex& proxyIndex) {
                 auto* proxy
                     = qobject_cast<TreeFilterProxyModel*>(m_view->model());
                 if (!proxy)
                     return;
-                QString path = m->getPath(proxy->mapToSource(proxyIndex));
+                QString path = m_model->getPath(proxy->mapToSource(proxyIndex));
                 if (!path.isEmpty())
                     QApplication::clipboard()->setText(path);
             });
 
     connect(m_view, &JsonTreeView::copyDotPathRequested, this,
-            [this, m](const QModelIndex& proxyIndex) {
+            [this](const QModelIndex& proxyIndex) {
                 auto* proxy
                     = qobject_cast<TreeFilterProxyModel*>(m_view->model());
                 if (!proxy)
                     return;
-                QString dotPath = m->getDotPath(proxy->mapToSource(proxyIndex));
+                QString dotPath
+                    = m_model->getDotPath(proxy->mapToSource(proxyIndex));
                 if (!dotPath.isEmpty())
                     QApplication::clipboard()->setText(dotPath);
             });
 
     connect(
         m_view, &JsonTreeView::copySubtreeRequested, this,
-        [this, m](const QModelIndex& proxyIndex) {
+        [this](const QModelIndex& proxyIndex) {
             auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
             if (!proxy)
                 return;
             bool success = false;
             QString errorMsg;
-            QString subtree = m->getSubtree(proxy->mapToSource(proxyIndex),
-                                            &success, &errorMsg);
+            QString subtree = m_model->getSubtree(
+                proxy->mapToSource(proxyIndex), &success, &errorMsg);
             if (success) {
                 QApplication::clipboard()->setText(subtree);
             }
@@ -375,14 +428,14 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 
     connect(
         m_view, &JsonTreeView::copyKeyValueRequested, this,
-        [this, m](const QModelIndex& proxyIndex) {
+        [this](const auto& proxyIndex) {
             auto* proxy = qobject_cast<TreeFilterProxyModel*>(m_view->model());
             if (!proxy)
                 return;
             bool success = false;
             QString errorMsg;
-            QString kv = m->getKeyValue(proxy->mapToSource(proxyIndex),
-                                        &success, &errorMsg);
+            QString kv = m_model->getKeyValue(proxy->mapToSource(proxyIndex),
+                                              &success, &errorMsg);
             if (success) {
                 QApplication::clipboard()->setText(kv);
             }
@@ -393,7 +446,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
         });
 
     connect(m_view, &JsonTreeView::exportSelectionRequested, this,
-            [this, m](const QModelIndex& proxyIndex) {
+            [this](const QModelIndex& proxyIndex) {
                 auto* proxy
                     = qobject_cast<TreeFilterProxyModel*>(m_view->model());
                 if (!proxy)
@@ -401,7 +454,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 
                 // Get the source model index and item
                 QModelIndex srcIndex = proxy->mapToSource(proxyIndex);
-                JsonTreeItem* item   = m->getItem(srcIndex);
+                JsonTreeItem* item   = m_model->getItem(srcIndex);
                 if (!item) {
                     emit sigCommand(
                         ViewCommandType::VCT_ShowToastMsg,
@@ -427,7 +480,8 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                 // Extract the subtree as JSON string
                 bool success = false;
                 QString errorMsg;
-                QString subtree = m->getSubtree(srcIndex, &success, &errorMsg);
+                QString subtree
+                    = m_model->getSubtree(srcIndex, &success, &errorMsg);
                 if (!success) {
                     emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
                                     tr("Export Failed") + "\n" + errorMsg);
@@ -526,7 +580,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     updateTheme(options()->theme());
 
     // Start background loading
-    startBackgroundLoad(m, options()->path());
+    startBackgroundLoad(m_model, options()->path());
     // VCV_Loaded will be emitted by startBackgroundLoad after loading completes
 }
 
@@ -769,6 +823,14 @@ void JsonTreeViewer::updateStatusBarStats(JsonTreeModel* model)
 
 void JsonTreeViewer::updateTheme(int theme)
 {
+    const auto& cfg = Config::instance();
+    if (cfg.themeMode() == "light") {
+        theme = 0;  // Force light
+    }
+    else if (cfg.themeMode() == "dark") {
+        theme = 1;  // Force dark
+    }
+
     if (!m_btn_text_view) {
         return;
     }
