@@ -40,8 +40,10 @@ bool LargeFileStrategy::preparePadding()
     // For 100MB-1GB files, 2x memory is acceptable for correctness.
     m_padding_buf.resize(file_size + padding, '\0');
     std::memcpy(m_padding_buf.data(), m_mmap.data(), file_size);
-    m_data_ptr  = m_padding_buf.data();
-    m_data_size = file_size;
+    m_data_ptr             = m_padding_buf.data();
+    m_data_size            = file_size;
+    m_metrics.totalBytes   = file_size;
+    m_metrics.strategyName = "LargeFileStrategy";
     return true;
 }
 
@@ -53,7 +55,16 @@ void LargeFileStrategy::getRootMetadata(QString& pointer,
     pointer     = "";  // Root pointer is empty string per RFC 6901
     byte_offset = 0;
     byte_length = m_data_size;
-    child_count = countLocalBufferChildren(dataPtr(), dataSize());
+    auto result = countLocalBufferChildren(dataPtr(), dataSize());
+    child_count = result.count;
+
+    // Store error in metrics if parsing failed
+    if (!result.error.isEmpty()) {
+        m_metrics.parseError  = result.error;
+        m_metrics.errorOffset = result.offset;
+        m_metrics.errorContext
+            = extractErrorContext(dataPtr(), dataSize(), result.offset);
+    }
 }
 
 QVector<JsonTreeItem*> LargeFileStrategy::extractChildren(
@@ -67,9 +78,8 @@ QVector<JsonTreeItem*> LargeFileStrategy::extractChildren(
                             end);
 }
 
-quint32 LargeFileStrategy::countChildren(const QString& parent_pointer,
-                                         quint64 byte_offset,
-                                         quint64 byte_length)
+JsonViewerStrategy::CountResult LargeFileStrategy::countChildren(
+    const QString& parent_pointer, quint64 byte_offset, quint64 byte_length)
 {
     return countChildrenAtPointer(parent_pointer, dataPtr(), dataSize());
 }

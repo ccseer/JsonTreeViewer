@@ -1,6 +1,7 @@
 #pragma once
 
 #include "seer/viewerbase.h"
+#include "strategies/jsonstrategy.h"
 
 class QLabel;
 class QLineEdit;
@@ -21,6 +22,7 @@ public:
 
     QSize getContentSize() const override;
     void updateDPR(qreal) override;
+    void updateTheme(int) override;
 
 private:
     void loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar) override;

@@ -89,6 +89,15 @@ void LoadWorker::doLoad()
     strategy->getRootMetadata(root_pointer, byte_offset, byte_length,
                               child_count);
 
+    // Check for parse errors
+    const auto& metrics = strategy->metrics();
+    if (!metrics.parseError.isEmpty()) {
+        qprintt << "[BG LOAD] Parse error in root metadata:"
+                << metrics.parseError;
+        emit loadCompleted(nullptr, strategy, false, timer.elapsed());
+        return;
+    }
+
     root->pointer      = root_pointer;  // Should be empty string
     root->byte_offset  = byte_offset;
     root->byte_length  = byte_length;
@@ -202,8 +211,9 @@ void FetchWorker::doFetch()
         else {
             // Unknown count or potentially large - count first to decide on
             // paging
-            child_count = m_strategy->countChildren(
+            auto count_res = m_strategy->countChildren(
                 m_parent_pointer, m_byte_offset, m_byte_length);
+            child_count = count_res.count;
             qprintt << "[FETCH ASYNC] Counted" << child_count << "children";
 
             qprintt << "[FETCH ASYNC] child_count=" << child_count

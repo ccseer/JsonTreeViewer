@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QStringBuilder>
 #include <QTimer>
+#include <memory>
 
 #include "jsonnode.h"
 #include "loadworker.h"
@@ -87,30 +88,79 @@ void JsonTreeModel::onLoadCompleted(
     bool success,
     qint64 elapsedMs)
 {
+    m_strategy  = strategy;
+    m_file_mode = strategy ? strategy->type() : FileMode::Small;
+
+    // Check for parse errors first
+    const auto* metrics = strategy ? &strategy->metrics() : nullptr;
+    if (metrics && !metrics->parseError.isEmpty()) {
+        // Create error tree instead of normal tree
+        beginResetModel();
+        m_root_item = nullptr;
+        m_root_shared.reset();
+        m_root_shared = createErrorTree(metrics);
+        m_root_item   = m_root_shared.get();
+        endResetModel();
+
+        // Still return success to prevent Seer from switching viewers
+        emit loadFinished(true, elapsedMs);
+        return;
+    }
+
     if (!success) {
-        qprintt << "[LOAD ASYNC] Load failed";
+        qprintt << "[LOAD ASYNC] Load failed (no parse error details)";
         emit loadFinished(false, elapsedMs);
         return;
     }
 
     qprintt << "[LOAD ASYNC] Completed in" << elapsedMs << "ms";
 
-    // Update model in main thread
+    // Normal flow: update model with parsed tree
     beginResetModel();
-
     m_root_item = nullptr;
     m_root_shared.reset();
     m_root_shared = root;        // Keep shared_ptr alive
     m_root_item   = root.get();  // Raw pointer for quick access
-    m_strategy    = strategy;    // shared_ptr assignment keeps strategy alive
-
-    // Strategy type is now FileMode, so we can assign directly
-    m_file_mode = strategy->type();
 
     endResetModel();
 
     qprintt << "=== [LOAD END] Total time:" << elapsedMs << "ms ===";
     emit loadFinished(true, elapsedMs);
+}
+
+std::shared_ptr<JsonTreeItem> JsonTreeModel::createErrorTree(
+    const JsonViewerStrategy::Metrics* metrics)
+{
+    // Create a dummy root (will be hidden by QTreeView)
+    auto root = std::make_shared<JsonTreeItem>("root", "", 'r', "", nullptr);
+    root->has_children    = true;
+    root->children_loaded = true;
+
+    // Add "⚠️ Parse Error" as the first visible node (no value to avoid
+    // duplication with Context)
+    auto* errorNode            = new JsonTreeItem("⚠️ Parse Error", "", 'E', "",
+                                                  root.get());  // Empty value
+    errorNode->has_children    = true;
+    errorNode->children_loaded = true;
+    root->children.append(errorNode);
+
+    // Add error details as children of the error node
+    auto* errorMsg = new JsonTreeItem("Error Message", "", 's',
+                                      metrics->parseError, errorNode);
+    errorNode->children.append(errorMsg);
+
+    // Always show position (even if 0)
+    auto* position = new JsonTreeItem(
+        "Position", "", 'n', QString::number(metrics->errorOffset), errorNode);
+    errorNode->children.append(position);
+
+    if (!metrics->errorContext.isEmpty()) {
+        auto* context = new JsonTreeItem("Context", "", 's',
+                                         metrics->errorContext, errorNode);
+        errorNode->children.append(context);
+    }
+
+    return root;
 }
 
 QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
@@ -175,6 +225,11 @@ QModelIndex JsonTreeModel::index(int row,
     }
     auto child_item = parent_item->children.at(row);
     return createIndex(row, column, child_item);
+}
+
+const JsonViewerStrategy::Metrics* JsonTreeModel::metrics() const
+{
+    return m_strategy ? &m_strategy->metrics() : nullptr;
 }
 
 QModelIndex JsonTreeModel::parent(const QModelIndex& index) const

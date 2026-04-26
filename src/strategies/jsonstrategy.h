@@ -6,6 +6,7 @@
 #include <QPair>
 #include <QString>
 #include <QVector>
+#include <memory>
 
 #include "../common.h"
 
@@ -88,6 +89,33 @@ public:
      * safe to call from background threads. It should check for thread
      * interruption periodically during heavy loops.
      */
+    struct Metrics {
+        QString parseError;
+        quint64 errorOffset = 0;
+        QString errorContext;
+        qint64 totalBytes  = 0;
+        qint64 mappedBytes = 0;
+        qint64 elapsedMs   = 0;
+        QString strategyName;
+    };
+
+    struct CountResult {
+        quint32 count = 0;
+        QString error;
+        quint64 offset = 0;
+    };
+
+    virtual const Metrics& metrics() const = 0;
+
+    /**
+     * @brief Extract children from the JSON file
+     * @param parent_pointer JSON pointer of the parent
+     * @param byte_offset Byte offset of the parent value in file
+     * @param byte_length Byte length of the parent value
+     * @param start Index of the first child to extract (-1 for all)
+     * @param end Index of the last child to extract (-1 for all)
+     * @return Vector of JsonTreeItem pointers
+     */
     virtual QVector<JsonTreeItem*> extractChildren(
         const QString& parent_pointer,
         quint64 byte_offset,
@@ -101,13 +129,11 @@ public:
      * @param parent_pointer JSON pointer of the parent
      * @param byte_offset Byte offset of the parent value in file
      * @param byte_length Byte length of the parent value
-     * @return Number of children
-     *
-     * This method can be called from a background thread.
+     * @return CountResult containing child count and any error
      */
-    virtual quint32 countChildren(const QString& parent_pointer,
-                                  quint64 byte_offset,
-                                  quint64 byte_length)
+    virtual CountResult countChildren(const QString& parent_pointer,
+                                      quint64 byte_offset,
+                                      quint64 byte_length)
         = 0;
 
     virtual const char* dataPtr() const = 0;
@@ -115,40 +141,20 @@ public:
 
     virtual CopyActions supportedActions() const = 0;
 
-    struct Metrics {
-        qint64 parseTimeMs      = 0;
-        qint64 treeBuildTimeMs  = 0;
-        qint64 totalLoadTimeMs  = 0;
-        qint64 memoryUsageBytes = 0;
-    };
-    virtual const Metrics& metrics() const = 0;
-
 protected:
-    /**
-     * @brief Count children in a local buffer
-     * @param base_ptr Pointer to the JSON value
-     * @param base_size Size of the JSON value
-     * @return Number of children
-     *
-     * Helper method for counting children in a memory buffer.
-     */
-    static quint32 countLocalBufferChildren(const char* base_ptr,
-                                            size_t base_size);
+    // Helper for strategies to count children in a local buffer
+    static CountResult countLocalBufferChildren(const char* base_ptr,
+                                                size_t base_size);
 
-    /**
-     * @brief Count children at a specific JSON pointer location
-     * @param parent_pointer JSON pointer to navigate to
-     * @param base_ptr Pointer to the JSON buffer
-     * @param base_size Size of the JSON buffer
-     * @return Number of children at that location
-     *
-     * Helper method for counting children at a specific JSON pointer.
-     * If parent_pointer is empty, counts root children.
-     * Otherwise navigates to the pointer and counts children there.
-     */
-    static quint32 countChildrenAtPointer(const QString& parent_pointer,
-                                          const char* base_ptr,
-                                          size_t base_size);
+    // Helper to count children at a JSON pointer
+    static CountResult countChildrenAtPointer(const QString& parent_pointer,
+                                              const char* base_ptr,
+                                              size_t base_size);
+
+    // Helper to extract error context (nearby text)
+    static QString extractErrorContext(const char* base_ptr,
+                                       size_t base_size,
+                                       quint64 offset);
 
     /**
      * @brief Parse children from a local buffer

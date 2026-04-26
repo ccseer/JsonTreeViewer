@@ -7,8 +7,12 @@
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QStandardPaths>
+#include <QSvgRenderer>
 #include <QTimer>
 #include <QUrl>
 
@@ -19,6 +23,36 @@
 #include "seer/viewerhelper.h"
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
+
+namespace {
+constexpr auto g_ctrlbar_btn_sz      = 30;
+constexpr auto g_ctrlbar_btn_icon_sz = 24;
+
+// Material Symbol: "Article" Rounded, Outline, Weight 300
+constexpr auto g_svg_article = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="M312-300h336v-44H312v44Zm0-160h336v-44H312v44Zm0-160h336v-44H312v44ZM228-156q-29.7 0-50.85-21.15Q156-198.3 156-228v-504q0-29.7 21.15-50.85Q198.3-804 228-804h504q29.7 0 50.85 21.15Q804-761.7 804-732v504q0 29.7-21.15 50.85Q761.7-156 732-156H228Zm0-72h504v-504H228v504Zm0 0v-504 504Z"/>
+</svg>)SVG";
+
+QIcon svgIcon(const char* svg_data, const QColor& color, int icon_sz, qreal dpr)
+{
+    QByteArray data(svg_data);
+    data.replace("currentColor", color.name(QColor::HexRgb).toUtf8());
+
+    QSvgRenderer renderer(data);
+    if (!renderer.isValid()) {
+        return {};
+    }
+
+    const int phys = qRound(icon_sz * dpr);
+    QPixmap pix(phys, phys);
+    pix.setDevicePixelRatio(dpr);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    renderer.render(&p, QRectF(0, 0, icon_sz, icon_sz));
+    return QIcon(pix);
+}
+}  // namespace
 
 JsonTreeViewer::JsonTreeViewer(QWidget* parent)
     : ViewerBase(parent), m_btn_text_view(nullptr), m_view(nullptr)
@@ -96,11 +130,10 @@ void JsonTreeViewer::updateDPR(qreal r)
     }
 
     if (m_btn_text_view) {
-        m_btn_text_view->setFixedSize(
-            m_btn_text_view->fontMetrics().horizontalAdvance(
-                m_btn_text_view->text())
-                + 8 * r * 2,
-            30 * r);
+        m_btn_text_view->setFixedSize(g_ctrlbar_btn_sz * r,
+                                      g_ctrlbar_btn_sz * r);
+        m_btn_text_view->setIconSize(
+            QSize(g_ctrlbar_btn_icon_sz * r, g_ctrlbar_btn_icon_sz * r));
     }
 }
 
@@ -380,7 +413,9 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();
         m_btn_text_view = new QPushButton(this);
-        m_btn_text_view->setText("Text View");
+        m_btn_text_view->setFlat(true);
+        m_btn_text_view->setToolTip("Text View");
+        m_btn_text_view->setFocusPolicy(Qt::NoFocus);
         lay_ctrlbar->addWidget(m_btn_text_view);
         connect(m_btn_text_view, &QPushButton::clicked, this,
                 &JsonTreeViewer::onTextViewBtnClicked);
@@ -431,6 +466,31 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
 
             m_view->setCopyActions(model->supportedActions());
             m_view->setFileMode(model->fileMode());
+
+            // Check for parse errors
+            const auto* metrics = model->metrics();
+            if (metrics && !metrics->parseError.isEmpty()) {
+                // Update status bar
+                if (m_statusbar.path_value) {
+                    m_statusbar.path_value->setText(tr("⚠️ JSON Parse Error"));
+                }
+
+                // Expand the root error node to show details
+                QTimer::singleShot(0, this, [this]() {
+                    auto* proxy
+                        = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                    if (proxy) {
+                        QModelIndex rootIndex = proxy->index(0, 0);
+                        if (rootIndex.isValid()) {
+                            m_view->expand(rootIndex);
+                        }
+                    }
+                });
+
+                // Return success to prevent Seer from switching to text viewer
+                emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
+                return;
+            }
 
             qprintt << "[BG LOAD] Adding info icon...";
 
@@ -586,4 +646,16 @@ void JsonTreeViewer::updateStatusBarStats(JsonTreeModel* model)
     // For now, just show a placeholder
     // TODO: Implement node counting and depth calculation
     m_statusbar.stats->setText("");
+}
+
+void JsonTreeViewer::updateTheme(int theme)
+{
+    if (!m_btn_text_view) {
+        return;
+    }
+    const auto sz  = m_btn_text_view->width();
+    const auto dpr = sz * 1. / g_ctrlbar_btn_sz;
+    m_btn_text_view->setIcon(
+        svgIcon(g_svg_article, qApp->palette().color(QPalette::WindowText),
+                dpr * g_ctrlbar_btn_icon_sz, dpr));
 }

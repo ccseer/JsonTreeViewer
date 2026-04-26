@@ -123,22 +123,29 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 if (range_mode && idx > end)
                     break;
 
-                auto fv        = field.value().value();
-                auto raw_tok   = fv.raw_json_token();
+                auto fv_res = field.value();
+                if (fv_res.error())
+                    continue;
+                auto fv = fv_res.value_unsafe();
+
+                auto raw_tok = fv.raw_json_token();
+
                 size_t abs_off = (raw_tok.data() - parse_ptr) + base_off;
                 char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
                 size_t len;
                 if (first_ch == '{' || first_ch == '[') {
                     auto raw_res = fv.raw_json();
-                    len          = raw_res.error() ? raw_tok.size()
-                                                   : raw_res.value_unsafe().size();
+                    len          = raw_res.value_unsafe().size();
                 }
                 else {
                     len = raw_tok.size();
                 }
                 auto [vt, vp] = typeAndPreviewFromRaw(base_ptr, abs_off, len);
 
-                std::string_view key = field.unescaped_key();
+                auto key_res = field.unescaped_key();
+                if (key_res.error())
+                    continue;
+                std::string_view key = key_res.value_unsafe();
                 QString key_str = QString::fromUtf8(key.data(), key.size());
                 QString esc_key = key_str;
                 esc_key.replace("~", "~0").replace("/", "~1");
@@ -183,15 +190,21 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 if (range_mode && idx > end)
                     break;
 
-                auto ev        = element.value();
-                auto raw_tok   = ev.raw_json_token();
+                auto ev_res = element;
+                if (ev_res.error()) {
+                    ++idx;
+                    continue;
+                }
+                auto ev = ev_res.value_unsafe();
+
+                auto raw_tok = ev.raw_json_token();
+
                 size_t abs_off = (raw_tok.data() - parse_ptr) + base_off;
                 char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
                 size_t len;
                 if (first_ch == '{' || first_ch == '[') {
                     auto raw_res = ev.raw_json();
-                    len          = raw_res.error() ? raw_tok.size()
-                                                   : raw_res.value_unsafe().size();
+                    len          = raw_res.value_unsafe().size();
                 }
                 else {
                     len = raw_tok.size();
@@ -262,15 +275,19 @@ std::shared_ptr<JsonViewerStrategy> JsonViewerStrategy::createStrategy(
     return std::make_shared<ExtremeFileStrategy>();
 }
 
-quint32 JsonViewerStrategy::countLocalBufferChildren(const char* base_ptr,
-                                                     size_t base_size)
+JsonViewerStrategy::CountResult JsonViewerStrategy::countLocalBufferChildren(
+    const char* base_ptr, size_t base_size)
 {
     const size_t padding = simdjson::SIMDJSON_PADDING;
 
     simdjson::ondemand::parser parser;
     auto iter_result = parser.iterate(base_ptr, base_size, base_size + padding);
-    if (iter_result.error())
-        return 0;
+    if (iter_result.error()) {
+        QString error
+            = QString::fromUtf8(simdjson::error_message(iter_result.error()));
+        qprintt << "JSON parse error:" << error;
+        return {0, error, 0};
+    }
     auto& doc = iter_result.value_unsafe();
 
     // Try as object first
@@ -278,7 +295,8 @@ quint32 JsonViewerStrategy::countLocalBufferChildren(const char* base_ptr,
     if (!obj_res.error()) {
         auto count_res = obj_res.value_unsafe().count_fields();
         if (!count_res.error())
-            return static_cast<quint32>(count_res.value_unsafe());
+            return {static_cast<quint32>(count_res.value_unsafe()), QString(),
+                    0};
     }
 
     // Try as array (need fresh parser)
@@ -289,14 +307,29 @@ quint32 JsonViewerStrategy::countLocalBufferChildren(const char* base_ptr,
         if (!arr_res.error()) {
             auto count_res = arr_res.value_unsafe().count_elements();
             if (!count_res.error())
-                return static_cast<quint32>(count_res.value_unsafe());
+                return {static_cast<quint32>(count_res.value_unsafe()),
+                        QString(), 0};
         }
     }
 
-    return 0;
+    // Capture specific error position if possible
+    simdjson::ondemand::parser parser3;
+    auto iter3 = parser3.iterate(base_ptr, base_size, base_size + padding);
+    if (!iter3.error()) {
+        auto& doc3 = iter3.value_unsafe();
+        // Trigger a deep parse to find the exact error location
+        auto val_res = doc3.get_value();
+        if (val_res.error()) {
+            return {0,
+                    QString::fromUtf8(simdjson::error_message(val_res.error())),
+                    0};
+        }
+    }
+
+    return {0, QString(), 0};
 }
 
-quint32 JsonViewerStrategy::countChildrenAtPointer(
+JsonViewerStrategy::CountResult JsonViewerStrategy::countChildrenAtPointer(
     const QString& parent_pointer, const char* base_ptr, size_t base_size)
 {
     if (parent_pointer.isEmpty()) {
@@ -308,12 +341,16 @@ quint32 JsonViewerStrategy::countChildrenAtPointer(
     simdjson::ondemand::parser parser;
     auto iter_result = parser.iterate(base_ptr, base_size, base_size + padding);
     if (iter_result.error())
-        return 0;
+        return {0,
+                QString::fromUtf8(simdjson::error_message(iter_result.error())),
+                0};
 
     auto& doc         = iter_result.value_unsafe();
     auto value_result = doc.at_pointer(parent_pointer.toStdString());
     if (value_result.error())
-        return 0;
+        return {
+            0, QString::fromUtf8(simdjson::error_message(value_result.error())),
+            0};
 
     auto value = value_result.value_unsafe();
 
@@ -322,17 +359,50 @@ quint32 JsonViewerStrategy::countChildrenAtPointer(
     if (!obj_res.error()) {
         auto count_res = obj_res.value_unsafe().count_fields();
         if (!count_res.error())
-            return static_cast<quint32>(count_res.value_unsafe());
+            return {static_cast<quint32>(count_res.value_unsafe()), QString(),
+                    0};
     }
 
     auto arr_res = value.get_array();
     if (!arr_res.error()) {
         auto count_res = arr_res.value_unsafe().count_elements();
         if (!count_res.error())
-            return static_cast<quint32>(count_res.value_unsafe());
+            return {static_cast<quint32>(count_res.value_unsafe()), QString(),
+                    0};
     }
 
-    return 0;
+    return {0, QString(), 0};
+}
+
+QString JsonViewerStrategy::extractErrorContext(const char* base_ptr,
+                                                size_t base_size,
+                                                quint64 offset)
+{
+    if (!base_ptr || base_size == 0)
+        return QString();
+
+    // Limit offset to stay within bounds
+    offset = qMin(offset, static_cast<quint64>(base_size - 1));
+
+    constexpr int context_size = 50;
+    int start = qMax(0, static_cast<int>(offset) - context_size);
+    int end   = qMin(static_cast<int>(base_size),
+                     static_cast<int>(offset) + context_size);
+
+    QString context;
+    if (start > 0)
+        context += "...";
+
+    // Read the chunk and handle non-printable characters or newlines
+    QByteArray chunk(base_ptr + start, end - start);
+    QString text = QString::fromUtf8(chunk);
+    text.replace('\n', ' ').replace('\r', ' ');
+    context += text;
+
+    if (end < static_cast<int>(base_size))
+        context += "...";
+
+    return context;
 }
 
 // O(slice) parsing: when byte_offset + byte_length are recorded we parse only
@@ -392,21 +462,31 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                         if (range_mode && idx > end)
                             break;
 
-                        auto fv        = field.value().value();
-                        auto raw_tok   = fv.raw_json_token();
+                        auto fv_res = field.value();
+                        if (fv_res.error()) {
+                            ++idx;
+                            continue;
+                        }
+                        auto fv = fv_res.value_unsafe();
+
+                        auto raw_tok = fv.raw_json_token();
+
                         size_t abs_off = (raw_tok.data() - base_ptr);
                         char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
                         size_t len;
                         if (first_ch == '{' || first_ch == '[') {
-                            auto raw_res = fv.raw_json();
-                            len          = raw_res.error()
-                                               ? raw_tok.size()
-                                               : raw_res.value_unsafe().size();
+                            auto raw = fv.raw_json();
+                            len      = raw.value_unsafe().size();
                         }
                         else {
                             len = raw_tok.size();
                         }
-                        std::string_view key = field.unescaped_key();
+                        auto key_res = field.unescaped_key();
+                        if (key_res.error()) {
+                            ++idx;
+                            continue;
+                        }
+                        std::string_view key = key_res.value_unsafe();
                         QString key_str
                             = QString::fromUtf8(key.data(), key.size());
                         QString esc_key = key_str;
@@ -460,16 +540,21 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                             if (range_mode && idx > end)
                                 break;
 
-                            auto ev        = element.value();
-                            auto raw_tok   = ev.raw_json_token();
+                            auto ev_res = element;
+                            if (ev_res.error()) {
+                                ++idx;
+                                continue;
+                            }
+                            auto ev = ev_res.value_unsafe();
+
+                            auto raw_tok = ev.raw_json_token();
+
                             size_t abs_off = (raw_tok.data() - base_ptr);
                             char first_ch  = raw_tok.empty() ? '?' : raw_tok[0];
                             size_t len;
                             if (first_ch == '{' || first_ch == '[') {
-                                auto raw_res = ev.raw_json();
-                                len          = raw_res.error()
-                                                   ? raw_tok.size()
-                                                   : raw_res.value_unsafe().size();
+                                auto raw = ev.raw_json();
+                                len      = raw.value_unsafe().size();
                             }
                             else {
                                 len = raw_tok.size();

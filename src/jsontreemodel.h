@@ -2,6 +2,7 @@
 
 #include <QQueue>
 #include <QSortFilterProxyModel>
+#include <memory>
 
 #include "common.h"
 #include "strategies/jsonstrategy.h"
@@ -32,6 +33,9 @@ public:
     {
         return m_fetch_queue.size() + (m_fetch_in_progress ? 1 : 0);
     }
+
+    // Access strategy metrics (e.g. for performance or error reporting)
+    const JsonViewerStrategy::Metrics* metrics() const;
 
     CopyActions supportedActions() const
     {
@@ -91,6 +95,10 @@ private:
     bool needsPaging(int child_count, FileMode mode) const;
     QVector<JsonTreeItem*> createPagedChildren(JsonTreeItem* parent_item,
                                                int total_children);
+
+    // Error tree creation
+    std::shared_ptr<JsonTreeItem> createErrorTree(
+        const JsonViewerStrategy::Metrics* metrics);
 
     // Async fetchMore support - single thread with queue
     // Items currently being fetched or queued

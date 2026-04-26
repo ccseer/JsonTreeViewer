@@ -19,6 +19,7 @@ TESTS_CONFIG = [
     {"exe": "test_copy.exe", "log": "test_copy.log"},
     {"exe": "test_async_loading.exe", "log": "test_async_loading.log"},
     {"exe": "test_string_parsing.exe", "log": "test_string_parsing.log"},
+    {"exe": "test_errors.exe", "log": "test_errors.log"},
 ]
 # --- End Configuration ---
 

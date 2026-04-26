@@ -5,6 +5,7 @@ enable_testing()
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+
 # Test executable
 add_executable(test_strategies
     test_strategies.cpp
@@ -165,3 +166,48 @@ add_test(NAME StringParsingTests COMMAND test_string_parsing)
 set_tests_properties(StringParsingTests PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+# Error reporting test executable
+add_executable(test_errors
+    test_errors.cpp
+    ../src/jsontreemodel.cpp
+    ../src/loadworker.cpp
+    ../src/jsonnode.h
+    ../src/strategies/jsonstrategy.cpp
+    ../src/strategies/smallfilestrategy.cpp
+    ../src/strategies/mediumfilestrategy.cpp
+    ../src/strategies/largefilestrategy.cpp
+    ../src/strategies/extremefilestrategy.cpp
+    ../src/memorymappedfile.cpp
+)
+
+target_include_directories(test_errors PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+)
+
+target_link_libraries(test_errors PRIVATE
+    simdjson_static
+    Qt6::Core
+    Qt6::Test
+)
+
+# Add error reporting test
+add_test(NAME ErrorTests COMMAND test_errors)
+
+set_tests_properties(ErrorTests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# Group all targets in this directory into a "Tests" folder in IDEs
+set(SUB_TEST_TARGETS 
+    test_strategies 
+    test_paging 
+    test_copy 
+    test_async_loading 
+    test_string_parsing 
+    test_errors
+)
+foreach(target_name ${SUB_TEST_TARGETS})
+    set_property(TARGET ${target_name} PROPERTY FOLDER "Tests")
+endforeach()

@@ -7,6 +7,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
+# IDE folder support
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
 # MSVC: Enable Debug Information in Release builds
 # /Zi: Generates a PDB file
 # /DEBUG: Linker flag to create the PDB
@@ -20,7 +23,7 @@ if(MSVC)
     )
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg)
 
 include(FetchContent)
 FetchContent_Declare(SeerSdk
@@ -71,6 +74,7 @@ target_link_libraries(jsontreeviewer PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::Svg
 )
 
 set_target_properties(jsontreeviewer PROPERTIES

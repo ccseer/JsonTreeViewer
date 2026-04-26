@@ -5,9 +5,11 @@
 #include <QDesktopServices>
 #include <QHeaderView>
 #include <QMenu>
+#include <QSortFilterProxyModel>
 #include <QTimer>
 #include <QUrl>
 
+#include "jsonnode.h"
 #include "jsontreemodel.h"
 
 namespace {
@@ -137,6 +139,21 @@ void JsonTreeView::upadteDPR(qreal r)
 void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
 {
     QModelIndex index = indexAt(event->pos());
+
+    // Check if this is an error tree by looking at the root node type
+    // Error trees have a root with type 'r' and first child with type 'E'
+    auto* treeModel = qobject_cast<JsonTreeModel*>(
+        qobject_cast<TreeFilterProxyModel*>(model())->sourceModel());
+    if (treeModel) {
+        auto* rootItem = treeModel->getItem(QModelIndex());
+        if (rootItem && !rootItem->children.isEmpty()) {
+            auto* firstChild = rootItem->children.first();
+            if (firstChild && firstChild->type == 'E') {
+                // This is an error tree, disable context menu
+                return;
+            }
+        }
+    }
 
     using CA = JsonViewerStrategy::CopyAction;
 

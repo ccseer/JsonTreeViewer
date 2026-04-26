@@ -15,7 +15,9 @@ bool MediumFileStrategy::initialize(const QString& path)
         qprintt << "Failed to load:" << simdjson::error_message(result.error());
         return false;
     }
-    m_json_data = std::move(result.value());
+    m_json_data            = std::move(result).value_unsafe();
+    m_metrics.totalBytes   = m_json_data.size();
+    m_metrics.strategyName = "MediumFileStrategy";
     qprintt << "Loaded" << m_json_data.size() << "bytes";
     return true;
 }
@@ -28,7 +30,16 @@ void MediumFileStrategy::getRootMetadata(QString& pointer,
     pointer     = "";  // Root pointer is empty string per RFC 6901
     byte_offset = 0;
     byte_length = m_json_data.size();
-    child_count = countLocalBufferChildren(dataPtr(), dataSize());
+    auto result = countLocalBufferChildren(dataPtr(), dataSize());
+    child_count = result.count;
+
+    // Store error in metrics if parsing failed
+    if (!result.error.isEmpty()) {
+        m_metrics.parseError  = result.error;
+        m_metrics.errorOffset = result.offset;
+        m_metrics.errorContext
+            = extractErrorContext(dataPtr(), dataSize(), result.offset);
+    }
 }
 
 QVector<JsonTreeItem*> MediumFileStrategy::extractChildren(
@@ -41,9 +52,8 @@ QVector<JsonTreeItem*> MediumFileStrategy::extractChildren(
     return parseLocalBuffer(parent_pointer, dataPtr(), dataSize(), start, end);
 }
 
-quint32 MediumFileStrategy::countChildren(const QString& parent_pointer,
-                                          quint64 byte_offset,
-                                          quint64 byte_length)
+JsonViewerStrategy::CountResult MediumFileStrategy::countChildren(
+    const QString& parent_pointer, quint64 byte_offset, quint64 byte_length)
 {
     return countChildrenAtPointer(parent_pointer, dataPtr(), dataSize());
 }

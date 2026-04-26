@@ -26,9 +26,9 @@ public:
                                            int start = -1,
                                            int end   = -1) override;
 
-    quint32 countChildren(const QString& parent_pointer,
-                          quint64 byte_offset,
-                          quint64 byte_length) override;
+    CountResult countChildren(const QString& parent_pointer,
+                              quint64 byte_offset,
+                              quint64 byte_length) override;
 
     const char* dataPtr() const override;
     size_t dataSize() const override;
