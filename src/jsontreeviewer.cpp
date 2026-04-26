@@ -260,9 +260,7 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
     connect(
         model, &JsonTreeModel::loadFinished, this,
         [this, model](bool success, qint64) {
-            qprintt << "[BG LOAD] Back in main thread, updating UI...";
-            QElapsedTimer uiTimer;
-            uiTimer.start();
+            qprintt << "[BG LOAD] loadFinished received";
 
             // Back in main thread for UI updates
             if (!success) {
@@ -308,8 +306,29 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
                 }
             }
 
-            qprintt << "[BG LOAD] UI update completed in" << uiTimer.elapsed()
-                    << "ms";
+            qprintt << "[BG LOAD] loadFinished processing complete";
+
+            // Proactively trigger first fetch if root has children
+            QModelIndex rootIndex;
+            if (model->hasChildren(rootIndex)) {
+                qprintt << "[BG LOAD] Triggering first fetch";
+                model->fetchMore(rootIndex);
+            }
+            else {
+                // No children, can show UI immediately
+                if (m_status_bar) {
+                    m_status_bar->setText(tr("Ready"));
+                }
+                qprintt << "=== [BG LOAD END] Success (no children) ===";
+                emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
+            }
+        },
+        Qt::SingleShotConnection);
+
+    connect(
+        model, &JsonTreeModel::firstFetchCompleted, this,
+        [this](qint64) {
+            qprintt << "[BG LOAD] firstFetchCompleted received";
 
             if (m_status_bar) {
                 m_status_bar->setText(tr("Ready"));

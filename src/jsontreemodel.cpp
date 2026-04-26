@@ -1,5 +1,6 @@
 #include "jsontreemodel.h"
 
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -58,6 +59,8 @@ JsonTreeModel::~JsonTreeModel()
 bool JsonTreeModel::load(const QString& path)
 {
     qprintt << "=== [LOAD START ASYNC] ===" << path;
+
+    m_load_start_time = QDateTime::currentMSecsSinceEpoch();
 
     auto* thread                = new JTVThread;
     QPointer<LoadWorker> worker = new LoadWorker(path);
@@ -250,6 +253,12 @@ void JsonTreeModel::fetchMore(const QModelIndex& parent)
 
     qprintt << "=== [FETCH START ASYNC] ===" << item->key
             << "offset:" << item->byte_offset;
+
+    // Check if this is the first fetch (root children)
+    if (item == m_root_item && !m_waiting_for_first_fetch) {
+        m_waiting_for_first_fetch = true;
+        qprintt << "[FETCH] This is the first fetch (root children)";
+    }
 
     beginInsertRows(parent, 0, 0);
     auto* loadingItem   = new JsonTreeItem("Loading...", "", 0);
@@ -604,7 +613,8 @@ void JsonTreeModel::processFetchQueue()
     auto* thread                 = new JTVThread;
     QPointer<FetchWorker> worker = new FetchWorker(
         m_strategy, fetch_pointer, fetch_offset, fetch_length, item, parent,
-        static_cast<int>(m_file_mode), page_start, page_end);
+        static_cast<int>(m_file_mode), page_start, page_end,
+        item->child_count);  // Pass cached count to avoid cross-thread access
     connect(this, &QObject::destroyed, [worker, thread]() {
         if (worker) {
             qprintt
@@ -694,12 +704,28 @@ void JsonTreeModel::onFetchCompleted(
         parent_item->children        = *children;
         parent_item->children_loaded = true;
 
+        // Cache the child count for future paging decisions
+        // This avoids needing to call countChildren() again
+        if (parent_item->child_count == 0) {
+            parent_item->child_count = count;
+        }
+
         // Model 已经"认领"了这些指针，现在它们由 parent->children 管理
         // 清空后，当 shared_ptr 析构时，自定义删除器看到的是空容器
         // 不会误删已经交给 Model 管理的节点
         children->clear();
 
         endInsertRows();
+    }
+
+    // Check if this was the first fetch (root children)
+    if (m_waiting_for_first_fetch && parent_item == m_root_item) {
+        m_waiting_for_first_fetch = false;
+        qint64 total_time
+            = QDateTime::currentMSecsSinceEpoch() - m_load_start_time;
+        qprintt << "=== [FIRST FETCH END] Total time (including first fetch):"
+                << total_time << "ms ===";
+        emit firstFetchCompleted(total_time);
     }
 
     // Cleanup current fetch

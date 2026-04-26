@@ -21,6 +21,7 @@ public:
 
     bool load(const QString& path);
     Q_SIGNAL void loadFinished(bool success, qint64 elapsedMs);
+    Q_SIGNAL void firstFetchCompleted(qint64 totalElapsedMs);
 
     FileMode fileMode() const
     {
@@ -105,6 +106,10 @@ private:
     // shared_ptr for thread safety
     std::shared_ptr<JsonViewerStrategy> m_strategy;
     FileMode m_file_mode;
+
+    // Track first fetch for loadFinished signal
+    bool m_waiting_for_first_fetch = false;
+    qint64 m_load_start_time       = 0;
 
     // Legacy members - will be removed after full strategy integration
     simdjson::ondemand::parser m_parser;

@@ -56,11 +56,11 @@ void LoadWorker::doLoad()
     // 3. Select strategy based on file size using factory method
     auto strategy = JsonViewerStrategy::createStrategy(fileSize);
 
-    //// 4. Check for interruption before initialization
-    // if (QThread::currentThread()->isInterruptionRequested()) {
-    //     qprintt << "[BG LOAD] Interrupted before initialize";
-    //     return;
-    // }
+    // 4. Check for interruption before initialization
+    if (QThread::currentThread()->isInterruptionRequested()) {
+        qprintt << "[BG LOAD] Interrupted before initialize";
+        return;
+    }
 
     // 5. Initialize strategy (reads file content, may take time)
     qprintt << "[BG LOAD] Initializing strategy...";
@@ -70,11 +70,11 @@ void LoadWorker::doLoad()
         return;
     }
 
-    //// 6. Check for interruption after initialization
-    // if (QThread::currentThread()->isInterruptionRequested()) {
-    //     qprintt << "[BG LOAD] Interrupted after initialize";
-    //     return;
-    // }
+    // 6. Check for interruption after initialization
+    if (QThread::currentThread()->isInterruptionRequested()) {
+        qprintt << "[BG LOAD] Interrupted after initialize";
+        return;
+    }
 
     // 7. Create root node (pure data operation)
     auto root = std::make_shared<JsonTreeItem>(
@@ -123,6 +123,7 @@ FetchWorker::FetchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
                          int file_mode,
                          int page_start,
                          int page_end,
+                         quint32 cached_child_count,
                          QObject* parent)
     : QObject(parent),
       m_strategy(strategy),
@@ -133,9 +134,10 @@ FetchWorker::FetchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
       m_parent_index(parent_index),
       m_file_mode(file_mode),
       m_page_start(page_start),
-      m_page_end(page_end)
+      m_page_end(page_end),
+      m_cached_child_count(cached_child_count)
 {
-    qprintt << "this";
+    qprintt << this;
 }
 
 FetchWorker::~FetchWorker()
@@ -186,9 +188,9 @@ void FetchWorker::doFetch()
     }
     else {
         // Normal node: check if we might need paging based on cached
-        // child_count If child_count is already known and below threshold, skip
-        // counting
-        quint32 child_count = m_parent_item->child_count;
+        // child_count Use cached value from main thread to avoid cross-thread
+        // access
+        quint32 child_count = m_cached_child_count;
 
         if (child_count > 0 && !needsPaging(child_count)) {
             // Small node with known count - extract directly without counting

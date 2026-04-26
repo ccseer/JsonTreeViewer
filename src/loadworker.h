@@ -112,9 +112,10 @@ public:
                          JsonTreeItem* parent_item,
                          const QModelIndex& parent_index,
                          int file_mode,
-                         int page_start  = -1,
-                         int page_end    = -1,
-                         QObject* parent = nullptr);
+                         int page_start             = -1,
+                         int page_end               = -1,
+                         quint32 cached_child_count = 0,
+                         QObject* parent            = nullptr);
     ~FetchWorker();
 
 public slots:
@@ -168,4 +169,6 @@ private:
     int m_file_mode;   // File mode for paging logic
     int m_page_start;  // Page range for virtual pages (-1 = not a virtual page)
     int m_page_end;
+    quint32 m_cached_child_count;  // Cached from main thread to avoid
+                                   // cross-thread access
 };

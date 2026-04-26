@@ -32,6 +32,14 @@ bool ExtremeFileStrategy::preparePadding()
     if (file_size == 0)
         return false;
 
+    // NOTE: This copies the entire file to add padding, using 2x memory.
+    // Trade-off: simdjson requires padding at the end of the buffer, but
+    // memory-mapped files cannot guarantee this. Alternatives:
+    // 1. Use padded_string::load() - loses mmap benefits, reads entire file
+    // 2. Platform-specific tricks (mmap extra pages) - complex, non-portable
+    // 3. Current approach - simple, safe, predictable memory usage
+    // For 1GB+ files, 2x memory is a known limitation. Future optimization:
+    // consider streaming/chunked parsing for files > available RAM.
     m_padding_buf.resize(file_size + padding, '\0');
     std::memcpy(m_padding_buf.data(), m_mmap.data(), file_size);
     m_data_ptr  = m_padding_buf.data();
