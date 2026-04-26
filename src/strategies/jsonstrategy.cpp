@@ -57,13 +57,20 @@ QPair<char, QString> typeAndPreviewFromRaw(const char* data_ptr,
             content_len = length > 2 ? length - 2 : 0;
         }
 
-        if (content_len > 100) {
-            // Truncate long strings
-            return {'s', QString::fromUtf8(data_ptr + offset + 1, 100) + "..."};
+        // Enhanced preview: show truncated content with character count for
+        // long strings
+        if (content_len > 80) {
+            QString preview = QString::fromUtf8(data_ptr + offset + 1, 80);
+            preview.replace("\n", " ");
+            return {
+                's',
+                QString("\"%1...\" (%2 chars)").arg(preview).arg(content_len)};
         }
-        // Return string content without quotes
-        return {'s', QString::fromUtf8(data_ptr + offset + 1,
-                                       static_cast<int>(content_len))};
+        // Return string content with quotes for small strings
+        return {'s', "\""
+                         + QString::fromUtf8(data_ptr + offset + 1,
+                                             static_cast<int>(content_len))
+                         + "\""};
     }
     if (first == 't' || first == 'f')
         return {'b', QString::fromUtf8(data_ptr + offset, length)};

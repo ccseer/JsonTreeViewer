@@ -1,6 +1,9 @@
 #pragma once
 
+#include <QAbstractItemModel>
+#include <QIcon>
 #include <QQueue>
+#include <QSet>
 #include <QSortFilterProxyModel>
 #include <memory>
 
@@ -130,6 +133,12 @@ private:
     simdjson::ondemand::parser m_parser;
     simdjson::padded_string m_json_data;
     simdjson::ondemand::document m_doc;
+
+    // Design cache
+    void refreshDesign();
+    QIcon m_objIcon;
+    QIcon m_arrIcon;
+    bool m_isDarkMode = false;
 };
 
 ////////////////////////////////////////////////////////////
@@ -139,6 +148,10 @@ public:
     TreeFilterProxyModel(QObject* parent = nullptr);
 
     void updateFilter(const QString& text);
+    QString filterText() const
+    {
+        return m_filter_text;
+    }
 
 protected:
     bool filterAcceptsRow(int row, const QModelIndex& parent) const override;

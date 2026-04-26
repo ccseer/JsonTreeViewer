@@ -5,11 +5,13 @@
 #include <QDesktopServices>
 #include <QHeaderView>
 #include <QMenu>
+#include <QPainter>
 #include <QSortFilterProxyModel>
 #include <QTimer>
 #include <QUrl>
 
 #include "jsonnode.h"
+#include "jsontreedelegate.h"
 #include "jsontreemodel.h"
 
 namespace {
@@ -103,6 +105,9 @@ JsonTreeView::JsonTreeView(QWidget* parent) : QTreeView(parent)
     setAnimated(false);
     setContextMenuPolicy(Qt::DefaultContextMenu);
     header()->setStretchLastSection(true);
+
+    // Set custom delegate for handling selected item colors
+    setItemDelegate(new JsonTreeDelegate(this));
 
     // Add global shortcuts for collapse/expand all
     QAction* collapseAction = new QAction(this);
@@ -249,4 +254,40 @@ void JsonTreeView::resizeEvent(QResizeEvent* event)
         header()->resizeSection(0, width() / 3);
         m_firstResize = false;
     }
+}
+
+void JsonTreeView::drawBranches(QPainter* painter,
+                                const QRect& rect,
+                                const QModelIndex& index) const
+{
+    // 1. Call base class first so it can draw arrows/background
+    QTreeView::drawBranches(painter, rect, index);
+
+    // 2. Draw subtle vertical guide lines ON TOP
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, false);
+
+    // Use a thin dotted line with lower alpha for a professional IDE-like feel
+    QColor lineColor = palette().color(QPalette::Text);
+    lineColor.setAlpha(65);
+    painter->setPen(QPen(lineColor, 1.0, Qt::DotLine));
+
+    int indent = indentation();
+    if (indent > 0) {
+        // How many levels deep are we?
+        int depth        = 0;
+        QModelIndex temp = index.parent();
+        while (temp.isValid()) {
+            depth++;
+            temp = temp.parent();
+        }
+
+        // Draw lines for each parent level
+        for (int i = 0; i < depth; ++i) {
+            int x = rect.left() + (i * indent) + indent / 2;
+            painter->drawLine(x, rect.top(), x, rect.bottom());
+        }
+    }
+
+    painter->restore();
 }

@@ -1,11 +1,18 @@
 #include "jsontreemodel.h"
 
+#include <QApplication>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPainter>
+#include <QPalette>
+#include <QPixmap>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QStringBuilder>
+#include <QSvgRenderer>
 #include <QTimer>
 #include <memory>
 
@@ -25,16 +32,114 @@ constexpr auto g_type_arr = "Array";
 // constexpr auto g_type_bool = "Boolean";
 
 enum ColumnIndex : uchar { CI_Key = 0, CI_Value = 1, CI_Count };
+
+// Material Symbol: "Curly Brackets" - Stroke version for better visibility
+constexpr auto g_svg_object = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M10 4H9a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1m4-18h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg>)SVG";
+
+// Material Symbol: "Square Brackets" - Stroke version for better visibility
+constexpr auto g_svg_array = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M8 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h1m8-14h1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/></svg>)SVG";
+
+// Helper to create icons from SVG data with stroke support
+QIcon svgIcon(const char* svg_data, const QColor& color, int icon_sz, qreal dpr)
+{
+    QByteArray data(svg_data);
+    // Replace both fill and stroke currentColor
+    QByteArray colorName = color.name(QColor::HexRgb).toUtf8();
+    data.replace("currentColor", colorName);
+
+    QSvgRenderer renderer(data);
+    if (!renderer.isValid()) {
+        return {};
+    }
+
+    const int phys = qRound(icon_sz * dpr);
+    QPixmap pix(phys, phys);
+    pix.setDevicePixelRatio(dpr);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+    renderer.render(&p, QRectF(0, 0, icon_sz, icon_sz));
+    return QIcon(pix);
+}
+
+// Color detection helper
+QColor parseColorValue(const QString& value)
+{
+    if (value.isEmpty())
+        return {};
+
+    // #RGB or #RRGGBB
+    static QRegularExpression hexColor(R"(^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$)");
+    auto match = hexColor.match(value);
+    if (match.hasMatch()) {
+        return QColor(value);
+    }
+
+    // rgb(r, g, b) or rgba(r, g, b, a)
+    static QRegularExpression rgbColor(
+        R"(^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$)");
+    match = rgbColor.match(value);
+    if (match.hasMatch()) {
+        int r = match.captured(1).toInt();
+        int g = match.captured(2).toInt();
+        int b = match.captured(3).toInt();
+        if (r > 255 || g > 255 || b > 255)
+            return {};
+
+        if (match.lastCapturedIndex() == 4) {
+            // rgba
+            double a = match.captured(4).toDouble();
+            return QColor(r, g, b, qRound(a * 255));
+        }
+        return QColor(r, g, b);
+    }
+
+    return {};
+}
+
+// Create color preview icon
+QPixmap createColorPreview(const QColor& color, qreal dpr, int size)
+{
+    const int phys = qRound(size * dpr);
+    QPixmap pixmap(phys, phys);
+    pixmap.setDevicePixelRatio(dpr);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Draw background if transparent (checkerboard)
+    if (color.alpha() < 255) {
+        painter.save();
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::white);
+        painter.drawRoundedRect(QRectF(0, 0, size, size), 2, 2);
+        painter.setBrush(QColor(200, 200, 200));
+        painter.drawRect(0, 0, size / 2, size / 2);
+        painter.drawRect(size / 2, size / 2, size / 2, size / 2);
+        painter.restore();
+    }
+
+    // Draw color square with rounded corners and subtle border
+    painter.setPen(QPen(QColor(0, 0, 0, 60), 1));
+    painter.setBrush(color);
+    painter.drawRoundedRect(QRectF(0.5, 0.5, size - 1, size - 1), 2, 2);
+
+    return pixmap;
+}
+
 }  // namespace
 
 //////////////////////////////////////////////
 JsonTreeModel::JsonTreeModel(QObject* parent)
     : QAbstractItemModel(parent),
-      m_root_item(new JsonTreeItem(
-          "root", {}, static_cast<char>(ondemand::json_type::null)))
+      m_root_item(new JsonTreeItem("root", "", 'r', "", nullptr))
 {
-    qprintt << "SIMDJSON_VERSION" << SIMDJSON_VERSION;
+    m_root_shared             = std::shared_ptr<JsonTreeItem>(m_root_item);
     m_root_item->has_children = true;
+    refreshDesign();
 }
 
 JsonTreeModel::~JsonTreeModel()
@@ -46,14 +151,26 @@ JsonTreeModel::~JsonTreeModel()
     m_fetch_queue.clear();
     m_fetching_items.clear();
 
-    // Safe to delete root immediately (or let shared_ptr handle it)
-    // m_strategy will be destroyed when last shared_ptr reference is released
-    // Don't delete m_root_item manually since it's managed by m_root_shared
     m_root_item = nullptr;
     m_root_shared.reset();
 
     qprintt << "~JsonTreeModel: Done (strategy refcount:"
             << (m_strategy ? m_strategy.use_count() : 0) << ")";
+}
+
+void JsonTreeModel::refreshDesign()
+{
+    m_isDarkMode = qApp->palette().color(QPalette::Window).lightness() < 128;
+    qreal dpr    = qApp->devicePixelRatio();
+    int iconSize = 18;
+
+    QColor objColor
+        = m_isDarkMode ? QColor(206, 147, 216) : QColor(156, 39, 176);
+    m_objIcon = svgIcon(g_svg_object, objColor, iconSize, dpr);
+
+    QColor arrColor
+        = m_isDarkMode ? QColor(128, 222, 234) : QColor(0, 188, 212);
+    m_arrIcon = svgIcon(g_svg_array, arrColor, iconSize, dpr);
 }
 
 bool JsonTreeModel::load(const QString& path)
@@ -168,27 +285,117 @@ QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
     if (!index.isValid()) {
         return {};
     }
-    // if (role == Qt::FontRole) {
-    //     auto item = static_cast<JsonTreeItem*>(index.internalPointer());
-    //     if (index.column() == 1
-    //         && (item->type == g_type_obj || item->type == g_type_arr)) {
-    //         QFont font;
-    //         font.setItalic(true);
-    //         return font;
-    //     }
-    //     return {};
-    // }
 
-    if (role != Qt::DisplayRole) {
+    auto item = static_cast<JsonTreeItem*>(index.internalPointer());
+
+    // Dim array indices (column 0) to distinguish them from real object keys
+    if (role == Qt::ForegroundRole && index.column() == CI_Key) {
+        // Check if this item's parent is an array
+        if (item->parent && item->parent->type == '[') {
+            // Array index - use secondary text color (dimmed)
+            bool isDark
+                = qApp->palette().color(QPalette::Window).lightness() < 128;
+            // Use 70% opacity for array indices
+            QColor textColor = qApp->palette().color(QPalette::Text);
+            textColor.setAlpha(180);  // ~70% opacity (180/255)
+            return textColor;
+        }
+        return {};  // Use default text color for object keys
+    }
+
+    // Type-based coloring for values (column 1)
+    if (role == Qt::ForegroundRole && index.column() == CI_Value) {
+        // Use refined, accessible colors that work in both light and dark
+        // themes Colors are chosen based on Seer's design principles: clean,
+        // sharp, refined
+
+        // Detect if we're in dark mode by checking the palette
+        // For containers (objects/arrays), use dimmed text for the preview
+        if (item->has_children) {
+            QColor textColor = qApp->palette().color(QPalette::Text);
+            textColor.setAlpha(180);  // ~70% opacity
+            return textColor;
+        }
+
+        switch (item->type) {
+        case 's':  // String - green
+            return m_isDarkMode
+                       ? QColor(129, 199, 132)  // Softer green for dark
+                       : QColor(76, 175, 80);   // Material green for light
+        case 'n':                               // Number - blue
+            return m_isDarkMode
+                       ? QColor(100, 181, 246)  // Lighter blue for dark
+                       : QColor(33, 150, 243);  // Material blue for light
+        case 'b':                               // Boolean - orange
+            return m_isDarkMode
+                       ? QColor(255, 183, 77)  // Softer orange for dark
+                       : QColor(255, 152, 0);  // Warm orange for light
+        case 'N':                              // null - gray
+            return m_isDarkMode
+                       ? QColor(176, 176, 176)   // Lighter gray for dark
+                       : QColor(158, 158, 158);  // Neutral gray for light
+        default:
+            return {};
+        }
+    }
+
+    // Node icons for keys (column 0) and color preview for values (column 1)
+    if (role == Qt::DecorationRole) {
+        if (index.column() == CI_Key) {
+            if (item->type == '{')
+                return m_objIcon;
+            if (item->type == '[')
+                return m_arrIcon;
+        }
+        else if (index.column() == CI_Value && item->type == 's') {
+            // Color preview for string values that look like colors
+            QColor color = parseColorValue(item->value);
+            if (color.isValid()) {
+                qreal dpr = qApp->devicePixelRatio();
+                // Match font height for premium look
+                int size = QFontMetrics(qApp->font()).height();
+                // Ensure it's not too large, 14-16 is usually good
+                size = qBound(12, size - 2, 18);
+                return createColorPreview(color, dpr, size);
+            }
+        }
         return {};
     }
-    auto item = static_cast<JsonTreeItem*>(index.internalPointer());
-    if (index.column() == CI_Key) {
-        return item->key;
+
+    if (role == Qt::ToolTipRole) {
+        if (index.column() == CI_Key) {
+            return getDotPath(index);
+        }
+        if (index.column() == CI_Value) {
+            return item->value;
+        }
     }
-    if (index.column() == CI_Value) {
-        return item->value;
+
+    if (role == Qt::DisplayRole) {
+        if (index.column() == CI_Key) {
+            return item->key;
+        }
+        if (index.column() == CI_Value) {
+            // Container preview
+            if (item->has_children) {
+                if (item->type == '{') {
+                    return item->child_count > 0 ? QString("Object (%1 fields)")
+                                                       .arg(item->child_count)
+                                                 : QString("Object");
+                }
+                else if (item->type == '[') {
+                    return item->child_count > 0 ? QString("Array (%1 items)")
+                                                       .arg(item->child_count)
+                                                 : QString("Array");
+                }
+            }
+
+            // Value is already processed by strategy (includes quotes and
+            // truncation)
+            return item->value;
+        }
     }
+
     return {};
 }
 
@@ -609,7 +816,16 @@ QString JsonTreeModel::getSubtree(const QModelIndex& index,
     if (!item->has_children) {
         if (success)
             *success = true;
-        return item->value;
+        // Use getValue() to ensure we fetch the full string from strategy,
+        // not the truncated preview.
+        const QModelIndex modelIdx = index(
+            item->parent->children.indexOf(const_cast<JsonTreeItem*>(item)), 1,
+            parent(index(
+                item->parent->children.indexOf(const_cast<JsonTreeItem*>(item)),
+                1, QModelIndex())));
+        // Actually, just use getValue directly with current index if it's
+        // column 1
+        return getValue(index.sibling(index.row(), CI_Value));
     }
 
     if (!m_strategy) {
@@ -630,20 +846,12 @@ QString JsonTreeModel::getSubtree(const QModelIndex& index,
                                                  m_strategy->dataSize() - item->byte_offset);
 
     QByteArray jsonData(subtree_start, chunk);
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(jsonData, &parseError);
 
-    if (doc.isNull()) {
-        if (errorMsg)
-            *errorMsg = QString("JSON parse error at offset %1: %2")
-                            .arg(parseError.offset)
-                            .arg(parseError.errorString());
-        return QString();
-    }
-
+    // Skip QJsonDocument parsing for large subtrees to avoid performance
+    // overhead. The raw JSON from the memory-mapped file is already valid.
     if (success)
         *success = true;
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(jsonData);
 }
 
 void JsonTreeModel::fetchMoreAsync(const QModelIndex& parent)

@@ -141,6 +141,20 @@ public:
 
     virtual CopyActions supportedActions() const = 0;
 
+    /**
+     * @brief Get the full raw string value from the source
+     * @param offset Byte offset
+     * @param length Byte length
+     * @return Full string value
+     */
+    virtual QString getRawValue(quint64 offset, quint64 length) const
+    {
+        if (!dataPtr() || offset + length > dataSize()) {
+            return QString();
+        }
+        return QString::fromUtf8(dataPtr() + offset, static_cast<int>(length));
+    }
+
 protected:
     // Helper for strategies to count children in a local buffer
     static CountResult countLocalBufferChildren(const char* base_ptr,

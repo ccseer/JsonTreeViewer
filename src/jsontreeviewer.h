@@ -8,6 +8,7 @@ class QLineEdit;
 class JsonTreeView;
 class JsonTreeModel;
 class QPushButton;
+class QProgressBar;
 
 class JsonTreeViewer : public ViewerBase {
     Q_OBJECT
@@ -39,16 +40,19 @@ private:
     } m_top;
 
     struct {
-        QLabel* path_value = nullptr;  // Left: path and value
-        QLabel* stats      = nullptr;  // Center: node statistics
-        QLabel* info       = nullptr;  // Right: info icon with tooltip
-    } m_statusbar;
+        QWidget* wnd_bg              = nullptr;
+        QWidget* breadcrumbs_wnd     = nullptr;
+        QHBoxLayout* breadcrumbs_lay = nullptr;
+        QLabel* value_label          = nullptr;  // For the " = value" part
+        QLabel* stats                = nullptr;  // Center: node statistics
+        QLabel* info = nullptr;  // Right: info icon with tooltip
+    } m_btm;
 
     QPushButton* m_btn_text_view;
 
     JsonTreeView* m_view;
-
-    qint64 m_load_time_ms = 0;
+    JsonTreeModel* m_model;
+    QProgressBar* m_progress_bar;
 };
 
 /////////////////////////////////////////////////////////////////

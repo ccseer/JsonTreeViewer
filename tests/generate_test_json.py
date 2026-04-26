@@ -39,6 +39,7 @@ def generate_json_file(filename, target_size_bytes):
             "balance": "$3,245.12",
             "age": 30,
             "eyeColor": "blue",
+            "hairColor": "#ff000f",
             "name": "John Doe",
             "gender": "male",
             "company": "TECHCORP",

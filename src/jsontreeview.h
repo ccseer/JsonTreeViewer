@@ -29,6 +29,9 @@ public:
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void drawBranches(QPainter* painter,
+                      const QRect& rect,
+                      const QModelIndex& index) const override;
 
 signals:
     void copyKeyRequested(const QModelIndex& index);

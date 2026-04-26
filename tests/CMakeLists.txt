@@ -28,6 +28,9 @@ target_include_directories(test_strategies PRIVATE
 target_link_libraries(test_strategies PRIVATE
     simdjson_static
     Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
     Qt6::Test
 )
 
@@ -61,6 +64,9 @@ target_include_directories(test_paging PRIVATE
 target_link_libraries(test_paging PRIVATE
     simdjson_static
     Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
     Qt6::Test
 )
 
@@ -93,6 +99,9 @@ target_include_directories(test_copy PRIVATE
 target_link_libraries(test_copy PRIVATE
     simdjson_static
     Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
     Qt6::Test
 )
 
@@ -125,6 +134,9 @@ target_include_directories(test_async_loading PRIVATE
 target_link_libraries(test_async_loading PRIVATE
     simdjson_static
     Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
     Qt6::Test
 )
 
@@ -157,6 +169,9 @@ target_include_directories(test_string_parsing PRIVATE
 target_link_libraries(test_string_parsing PRIVATE
     simdjson_static
     Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
     Qt6::Test
 )
 
@@ -189,6 +204,9 @@ target_include_directories(test_errors PRIVATE
 target_link_libraries(test_errors PRIVATE
     simdjson_static
     Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
     Qt6::Test
 )
 

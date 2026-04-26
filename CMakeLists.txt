@@ -45,6 +45,7 @@ target_include_directories(simdjson_static PUBLIC
 add_library(jsontreeviewer SHARED
     src/jsontreemodel.cpp
     src/jsontreeview.cpp
+    src/jsontreedelegate.cpp
     src/jsontreeviewer.cpp
     src/memorymappedfile.cpp
     src/loadworker.cpp
@@ -52,6 +53,7 @@ add_library(jsontreeviewer SHARED
     src/jsonnode.h
     src/jsontreemodel.h
     src/jsontreeview.h
+    src/jsontreedelegate.h
     src/jsontreeviewer.h
     src/memorymappedfile.h
     src/loadworker.h

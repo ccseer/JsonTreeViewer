@@ -5,11 +5,13 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QFile>
+#include <QFont>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QSvgRenderer>
@@ -28,10 +30,28 @@ namespace {
 constexpr auto g_ctrlbar_btn_sz      = 30;
 constexpr auto g_ctrlbar_btn_icon_sz = 24;
 
+// Material Symbol: "Search"
+constexpr auto g_svg_search = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/>
+</svg>)SVG";
+
 // Material Symbol: "Article" Rounded, Outline, Weight 300
 constexpr auto g_svg_article = R"SVG(
 <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
   <path fill="currentColor" d="M312-300h336v-44H312v44Zm0-160h336v-44H312v44Zm0-160h336v-44H312v44ZM228-156q-29.7 0-50.85-21.15Q156-198.3 156-228v-504q0-29.7 21.15-50.85Q198.3-804 228-804h504q29.7 0 50.85 21.15Q804-761.7 804-732v504q0 29.7-21.15 50.85Q761.7-156 732-156H228Zm0-72h504v-504H228v504Zm0 0v-504 504Z"/>
+</svg>)SVG";
+
+// Material Symbol: "Info" Rounded, Outline
+constexpr auto g_svg_info = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="M480-120q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm0-72q120 0 204-84t84-204q0-120-84-204t-204-84q-120 0-204 84t-84 204q0 120 84 204t204 84Zm-40-101h80v-240h-80v240Zm40-327q17 0 28.5-11.5T520-660q0-17-11.5-28.5T480-700q-17 0-28.5 11.5T440-660q0 17 11.5 28.5T480-620Z"/>
+</svg>)SVG";
+
+// Material Symbol: "Chevron Right"
+constexpr auto g_svg_chevron_right = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="m376-300-44-44 136-136-136-136 44-44 180 180-180 180Z"/>
 </svg>)SVG";
 
 QIcon svgIcon(const char* svg_data, const QColor& color, int icon_sz, qreal dpr)
@@ -75,6 +95,12 @@ void JsonTreeViewer::initTopWnd()
 
     m_top.filter->setPlaceholderText("Filter...");
     m_top.filter->setClearButtonEnabled(true);
+
+    // Add search icon
+    auto dpr         = options()->dpr();
+    QColor iconColor = qApp->palette().color(QPalette::PlaceholderText);
+    QIcon searchIcon = svgIcon(g_svg_search, iconColor, 16, dpr);
+    m_top.filter->addAction(searchIcon, QLineEdit::LeadingPosition);
 }
 
 QSize JsonTreeViewer::getContentSize() const
@@ -111,22 +137,27 @@ void JsonTreeViewer::updateDPR(qreal r)
     // Status bar labels
     auto sbFont = qApp->font();
     sbFont.setPixelSize(11 * r);
-    if (m_statusbar.path_value) {
-        m_statusbar.path_value->setFont(sbFont);
+    if (m_btm.breadcrumbs_wnd) {
         if (auto parent
-            = qobject_cast<QWidget*>(m_statusbar.path_value->parent())) {
-            parent->setFixedHeight(20 * r);
-            parent->layout()->setContentsMargins(6 * r, 0, 6 * r, 0);
+            = qobject_cast<QWidget*>(m_btm.breadcrumbs_wnd->parent())) {
+            parent->setFixedHeight(24 * r);  // Slightly taller for breadcrumbs
+            parent->layout()->setContentsMargins(4 * r, 0, 12 * r, 0);
         }
     }
-    if (m_statusbar.stats) {
-        m_statusbar.stats->setFont(sbFont);
+    if (m_btm.value_label) {
+        m_btm.value_label->setFont(sbFont);
     }
-    if (m_statusbar.info) {
+    if (m_btm.stats) {
+        m_btm.stats->setFont(sbFont);
+    }
+    if (m_progress_bar) {
+        m_progress_bar->setFixedHeight(2 * r);
+    }
+    if (m_btm.info) {
         auto infoFont = qApp->font();
         infoFont.setPixelSize(13 * r);
         infoFont.setBold(true);
-        m_statusbar.info->setFont(infoFont);
+        m_btm.info->setFont(infoFont);
     }
 
     if (m_btn_text_view) {
@@ -134,6 +165,10 @@ void JsonTreeViewer::updateDPR(qreal r)
                                       g_ctrlbar_btn_sz * r);
         m_btn_text_view->setIconSize(
             QSize(g_ctrlbar_btn_icon_sz * r, g_ctrlbar_btn_icon_sz * r));
+    }
+
+    if (m_model) {
+        m_model->refreshDesign();
     }
 }
 
@@ -143,10 +178,10 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     lay_content->setSpacing(0);
     lay_content->addWidget(m_top.wnd_bg);
 
-    JsonTreeModel* m = new JsonTreeModel(this);
+    m_model = new JsonTreeModel(this);
 
     auto proxy_model = new TreeFilterProxyModel(this);
-    proxy_model->setSourceModel(m);
+    proxy_model->setSourceModel(m_model);
     QTimer* timer = new QTimer(this);
     timer->setSingleShot(true);
     connect(m_top.filter, &QLineEdit::textChanged, this,
@@ -157,10 +192,22 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 
     m_view = new JsonTreeView(this);
     m_view->setCopyActions(m->supportedActions());
-    m_view->setFileMode(
-        FileMode::Small);  // Default to Small, will be updated after load
+    // Default to Small, will be updated after load
+    m_view->setFileMode(FileMode::Small);
     m_view->setModel(proxy_model);
+
+    // Subtle progress bar
+    m_progress_bar = new QProgressBar(this);
+    m_progress_bar->setRange(0, 0);  // Indeterminate
+    m_progress_bar->setTextVisible(false);
+    m_progress_bar->setFixedHeight(2);
+    m_progress_bar->setStyleSheet(
+        "QProgressBar { border: none; background: transparent; } "
+        "QProgressBar::chunk { background-color: #2196F3; }");
+    m_progress_bar->hide();
+
     lay_content->addWidget(m_view);
+    lay_content->addWidget(m_progress_bar);
 
     // Status bar with three sections
     QWidget* statusBarWidget  = new QWidget(this);
@@ -168,44 +215,98 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     statusLayout->setContentsMargins(0, 0, 0, 0);
     statusLayout->setSpacing(12);
 
-    // Left: path and value
-    m_statusbar.path_value = new QLabel(this);
-    m_statusbar.path_value->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_statusbar.path_value->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    statusLayout->addWidget(m_statusbar.path_value, 1);
+    // Left: Breadcrumbs container
+    m_btm.breadcrumbs_wnd = new QWidget(this);
+    m_btm.breadcrumbs_lay = new QHBoxLayout(m_btm.breadcrumbs_wnd);
+    m_btm.breadcrumbs_lay->setContentsMargins(8, 0, 0, 0);
+    m_btm.breadcrumbs_lay->setSpacing(0);
+    statusLayout->addWidget(m_btm.breadcrumbs_wnd, 0);
+
+    // Separator between breadcrumbs and value
+    m_btm.value_label = new QLabel(this);
+    m_btm.value_label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_btm.value_label->setStyleSheet("color: gray;");
+    statusLayout->addWidget(m_btm.value_label, 1);
 
     // Center: node statistics
-    m_statusbar.stats = new QLabel(this);
-    m_statusbar.stats->setAlignment(Qt::AlignCenter | Qt::AlignVCenter);
-    statusLayout->addWidget(m_statusbar.stats, 0);
+    m_btm.stats = new QLabel(this);
+    m_btm.stats->setAlignment(Qt::AlignCenter | Qt::AlignVCenter);
+    statusLayout->addWidget(m_btm.stats, 0);
 
     // Right: info icon
-    m_statusbar.info = new QLabel(this);
-    m_statusbar.info->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    statusLayout->addWidget(m_statusbar.info, 0);
+    m_btm.info = new QLabel(this);
+    m_btm.info->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    statusLayout->addWidget(m_btm.info, 0);
 
     lay_content->addWidget(statusBarWidget);
 
     connect(
         m_view->selectionModel(), &QItemSelectionModel::currentChanged, this,
         [this, m, proxy_model](const QModelIndex& current, const QModelIndex&) {
-            if (!current.isValid()) {
-                m_statusbar.path_value->clear();
-                return;
+            // Clear existing breadcrumbs
+            QLayoutItem* item;
+            while ((item = m_btm.breadcrumbs_lay->takeAt(0)) != nullptr) {
+                if (item->widget())
+                    item->widget()->deleteLater();
+                delete item;
             }
-            QModelIndex src = proxy_model->mapToSource(current);
-            QString path    = m->getPath(src);
-            QString key     = m->getKey(src);
-            QString val     = m->getValue(src);
+            m_btm.value_label->clear();
 
-            QString text = path.isEmpty() ? key : path;
+            if (!current.isValid())
+                return;
+
+            qreal dpr = options()->dpr();
+            QColor separatorColor
+                = qApp->palette().color(QPalette::PlaceholderText);
+            QIcon sepIcon
+                = svgIcon(g_svg_chevron_right, separatorColor, 16, dpr);
+
+            // Collect parents for breadcrumbs
+            QList<QModelIndex> hierarchy;
+            QModelIndex idx = current;
+            while (idx.isValid()) {
+                hierarchy.prepend(idx);
+                idx = idx.parent();
+            }
+
+            // Create breadcrumb segments
+            for (int i = 0; i < hierarchy.size(); ++i) {
+                const QModelIndex& hIdx = hierarchy[i];
+
+                // Add separator before segment (except the first one)
+                if (i > 0) {
+                    QLabel* sep = new QLabel(this);
+                    sep->setPixmap(sepIcon.pixmap(16 * dpr, 16 * dpr));
+                    m_btm.breadcrumbs_lay->addWidget(sep);
+                }
+
+                QPushButton* btn = new QPushButton(
+                    m->getKey(proxy_model->mapToSource(hIdx)), this);
+                btn->setFlat(true);
+                btn->setCursor(Qt::PointingHandCursor);
+                // Premium feel: subtle hover color via stylesheet
+                btn->setStyleSheet("QPushButton { border: none; padding: 2px 4px; color: " + qApp->palette().color(QPalette::WindowText).name() + "; } "
+                                   "QPushButton:hover { background-color: rgba(0, 0, 0, 20); border-radius: 4px; }");
+
+                connect(btn, &QPushButton::clicked, this, [this, hIdx]() {
+                    m_view->selectionModel()->setCurrentIndex(
+                        hIdx, QItemSelectionModel::ClearAndSelect
+                                  | QItemSelectionModel::Rows);
+                    m_view->scrollTo(hIdx);
+                });
+
+                m_btm.breadcrumbs_lay->addWidget(btn);
+            }
+
+            // Add value if present
+            QModelIndex src = proxy_model->mapToSource(current);
+            QString val     = m->getValue(src);
             if (!val.isEmpty()) {
-                constexpr int MAX_VAL = 80;
+                constexpr int MAX_VAL = 60;
                 if (val.length() > MAX_VAL)
                     val = val.left(MAX_VAL) + "...";
-                text += "  =  " + val;
+                m_btm.value_label->setText(" =  " + val);
             }
-            m_statusbar.path_value->setText(text);
         });
 
     // Connect copy signals
@@ -441,8 +542,16 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
 {
     qprintt << "=== [BG LOAD START] ===" << path;
 
-    if (m_statusbar.path_value) {
-        m_statusbar.path_value->setText(tr("Loading..."));
+    if (m_btm.breadcrumbs_lay) {
+        QLayoutItem* item;
+        while ((item = m_btm.breadcrumbs_lay->takeAt(0)) != nullptr) {
+            if (item->widget())
+                item->widget()->deleteLater();
+            delete item;
+        }
+    }
+    if (m_btm.value_label) {
+        m_btm.value_label->setText(tr("Loading..."));
     }
 
     connect(
@@ -450,14 +559,10 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
         [this, model, path](bool success, qint64 elapsedMs) {
             qprintt << "[BG LOAD] loadFinished received";
 
-            // Record load time
-            m_load_time_ms = elapsedMs;
-
             // Back in main thread for UI updates
             if (!success) {
-                if (m_statusbar.path_value) {
-                    m_statusbar.path_value->setText(
-                        tr("Failed to load JSON file"));
+                if (m_btm.value_label) {
+                    m_btm.value_label->setText(tr("Failed to load JSON file"));
                 }
                 emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Error);
                 qprintt << "=== [BG LOAD END] Failed ===";
@@ -471,8 +576,8 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             const auto* metrics = model->metrics();
             if (metrics && !metrics->parseError.isEmpty()) {
                 // Update status bar
-                if (m_statusbar.path_value) {
-                    m_statusbar.path_value->setText(tr("⚠️ JSON Parse Error"));
+                if (m_btm.value_label) {
+                    m_btm.value_label->setText(tr("⚠️ JSON Parse Error"));
                 }
 
                 // Expand the root error node to show details
@@ -495,16 +600,19 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             qprintt << "[BG LOAD] Adding info icon...";
 
             // Add info icon for all files
-            if (m_statusbar.info) {
-                m_statusbar.info->setText(" ℹ ");
-                m_statusbar.info->setAlignment(Qt::AlignCenter);
+            if (m_btm.info) {
+                qreal dpr = options()->dpr();
+                m_btm.info->setPixmap(
+                    svgIcon(g_svg_info, QColor("#2196F3"), 18, dpr)
+                        .pixmap(18 * dpr, 18 * dpr));
+                m_btm.info->setAlignment(Qt::AlignCenter);
 
                 QStringList tooltipLines;
 
                 // Performance metrics
                 tooltipLines << tr("=== Performance Metrics ===");
-                tooltipLines << tr("Load time: %1s")
-                                    .arg(m_load_time_ms / 1000.0, 0, 'f', 3);
+                tooltipLines
+                    << tr("Load time: %1s").arg(elapsedMs / 1000.0, 0, 'f', 3);
 
                 // File information
                 QFileInfo fileInfo(path);
@@ -570,7 +678,7 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
                     tooltipLines << tr("✓ All copy operations available");
                 }
 
-                m_statusbar.info->setToolTip(tooltipLines.join("\n"));
+                m_btm.info->setToolTip(tooltipLines.join("\n"));
             }
 
             qprintt << "[BG LOAD] loadFinished processing complete";
@@ -583,8 +691,8 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             }
             else {
                 // No children, can show UI immediately
-                if (m_statusbar.path_value) {
-                    m_statusbar.path_value->setText(tr("Ready"));
+                if (m_btm.value_label) {
+                    m_btm.value_label->setText(tr("Ready"));
                 }
                 qprintt << "=== [BG LOAD END] Success (no children) ===";
                 emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
@@ -597,8 +705,8 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
         [this](qint64) {
             qprintt << "[BG LOAD] firstFetchCompleted received";
 
-            if (m_statusbar.path_value) {
-                m_statusbar.path_value->setText(tr("Ready"));
+            if (m_btm.value_label) {
+                m_btm.value_label->setText(tr("Ready"));
             }
 
             qprintt << "=== [BG LOAD END] Success ===";
@@ -609,16 +717,20 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
     // Connect fetch queue status updates
     connect(model, &JsonTreeModel::fetchQueueChanged, this,
             [this](int queueSize, bool inProgress) {
-                if (!m_statusbar.path_value) {
+                if (m_progress_bar) {
+                    m_progress_bar->setVisible(queueSize > 0 || inProgress);
+                }
+
+                if (!m_btm.value_label) {
                     return;
                 }
 
                 if (queueSize > 0 || inProgress) {
-                    m_statusbar.path_value->setText(
+                    m_btm.value_label->setText(
                         tr("Fetching [%1]...").arg(queueSize));
                 }
                 else {
-                    m_statusbar.path_value->setText(tr("Ready"));
+                    m_btm.value_label->setText(tr("Ready"));
                 }
             });
 
@@ -646,13 +758,13 @@ QString JsonTreeViewer::formatFileSize(qint64 bytes) const
 
 void JsonTreeViewer::updateStatusBarStats(JsonTreeModel* model)
 {
-    if (!m_statusbar.stats || !model) {
+    if (!m_btm.stats || !model) {
         return;
     }
 
     // For now, just show a placeholder
     // TODO: Implement node counting and depth calculation
-    m_statusbar.stats->setText("");
+    m_btm.stats->setText("");
 }
 
 void JsonTreeViewer::updateTheme(int theme)
@@ -665,4 +777,8 @@ void JsonTreeViewer::updateTheme(int theme)
     m_btn_text_view->setIcon(
         svgIcon(g_svg_article, qApp->palette().color(QPalette::WindowText),
                 dpr * g_ctrlbar_btn_icon_sz, dpr));
+
+    if (m_model) {
+        m_model->refreshDesign();
+    }
 }
