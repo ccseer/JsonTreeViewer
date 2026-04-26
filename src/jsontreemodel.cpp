@@ -269,69 +269,6 @@ JsonTreeItem* JsonTreeModel::getItem(const QModelIndex& index) const
     return m_root_item;
 }
 
-QVector<JsonTreeItem*> JsonTreeModel::extractChildren(JsonTreeItem* parent_item)
-{
-    if (!parent_item || !parent_item->has_children)
-        return {};
-
-    if (parent_item->is_virtual_page) {
-        // Check if already loaded (ignore "Loading..." placeholder)
-        bool hasRealChildren = false;
-        for (const auto* child : parent_item->children) {
-            if (child->key != "Loading...") {
-                hasRealChildren = true;
-                break;
-            }
-        }
-        if (hasRealChildren)
-            return {};
-
-        JsonTreeItem* actual_parent = parent_item->parent;
-        if (!actual_parent || !m_strategy)
-            return {};
-
-        // Pass range directly to strategy: O(page_size), not O(N).
-        QVector<JsonTreeItem*> page_children = m_strategy->extractChildren(
-            actual_parent->pointer, actual_parent->byte_offset,
-            actual_parent->byte_length, parent_item->page_start,
-            parent_item->page_end);
-
-        for (JsonTreeItem* child : page_children)
-            child->parent = parent_item;
-
-        return page_children;
-    }
-
-    // Check if already loaded (ignore "Loading..." placeholder)
-    bool hasRealChildren = false;
-    for (const auto* child : parent_item->children) {
-        if (child->key != "Loading...") {
-            hasRealChildren = true;
-            break;
-        }
-    }
-    if (hasRealChildren)
-        return {};
-
-    if (!m_strategy)
-        return {};
-
-    quint32 child_count = parent_item->child_count;
-    if (child_count == 0 && parent_item->has_children) {
-        child_count = m_strategy->countChildren(parent_item->pointer,
-                                                parent_item->byte_offset,
-                                                parent_item->byte_length);
-        parent_item->child_count = child_count;
-    }
-
-    if (needsPaging(child_count, m_file_mode))
-        return createPagedChildren(parent_item, child_count);
-
-    return m_strategy->extractChildren(parent_item->pointer,
-                                       parent_item->byte_offset,
-                                       parent_item->byte_length);
-}
-
 int JsonTreeModel::getPageSize(FileMode mode) const
 {
     switch (mode) {
@@ -645,11 +582,29 @@ void JsonTreeModel::processFetchQueue()
     // Mark as in progress
     m_fetch_in_progress = true;
 
+    // Check if this is a virtual page
+    int page_start        = -1;
+    int page_end          = -1;
+    QString fetch_pointer = item->pointer;
+    quint64 fetch_offset  = item->byte_offset;
+    quint64 fetch_length  = item->byte_length;
+
+    if (item->is_virtual_page && item->parent) {
+        // For virtual pages, use parent's pointer and pass page range
+        page_start    = item->page_start;
+        page_end      = item->page_end;
+        fetch_pointer = item->parent->pointer;
+        fetch_offset  = item->parent->byte_offset;
+        fetch_length  = item->parent->byte_length;
+        qprintt << "[FETCH ASYNC] Virtual page [" << page_start << ".."
+                << page_end << "]";
+    }
+
     // Create background thread with no parent for true async cleanup
-    auto* thread = new JTVThread;
-    QPointer<FetchWorker> worker
-        = new FetchWorker(m_strategy, item->pointer, item->byte_offset,
-                          item->byte_length, item, parent);
+    auto* thread                 = new JTVThread;
+    QPointer<FetchWorker> worker = new FetchWorker(
+        m_strategy, fetch_pointer, fetch_offset, fetch_length, item, parent,
+        static_cast<int>(m_file_mode), page_start, page_end);
     connect(this, &QObject::destroyed, [worker, thread]() {
         if (worker) {
             qprintt

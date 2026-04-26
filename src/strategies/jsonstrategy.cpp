@@ -266,6 +266,45 @@ quint32 JsonViewerStrategy::countLocalBufferChildren(const char* base_ptr,
     return 0;
 }
 
+quint32 JsonViewerStrategy::countChildrenAtPointer(
+    const QString& parent_pointer, const char* base_ptr, size_t base_size)
+{
+    if (parent_pointer.isEmpty()) {
+        return countLocalBufferChildren(base_ptr, base_size);
+    }
+
+    // Navigate to the parent node using JSON pointer
+    const size_t padding = simdjson::SIMDJSON_PADDING;
+    simdjson::ondemand::parser parser;
+    auto iter_result = parser.iterate(base_ptr, base_size, base_size + padding);
+    if (iter_result.error())
+        return 0;
+
+    auto& doc         = iter_result.value_unsafe();
+    auto value_result = doc.at_pointer(parent_pointer.toStdString());
+    if (value_result.error())
+        return 0;
+
+    auto value = value_result.value_unsafe();
+
+    // Count children of this value
+    auto obj_res = value.get_object();
+    if (!obj_res.error()) {
+        auto count_res = obj_res.value_unsafe().count_fields();
+        if (!count_res.error())
+            return static_cast<quint32>(count_res.value_unsafe());
+    }
+
+    auto arr_res = value.get_array();
+    if (!arr_res.error()) {
+        auto count_res = arr_res.value_unsafe().count_elements();
+        if (!count_res.error())
+            return static_cast<quint32>(count_res.value_unsafe());
+    }
+
+    return 0;
+}
+
 // O(slice) parsing: when byte_offset + byte_length are recorded we parse only
 // that slice, avoiding a full O(N) document scan for every expand.
 //

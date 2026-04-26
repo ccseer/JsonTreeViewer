@@ -111,6 +111,9 @@ public:
                          quint64 byte_length,
                          JsonTreeItem* parent_item,
                          const QModelIndex& parent_index,
+                         int file_mode,
+                         int page_start  = -1,
+                         int page_end    = -1,
                          QObject* parent = nullptr);
     ~FetchWorker();
 
@@ -150,11 +153,19 @@ signals:
     void progressUpdated(int dotCount, int unused);
 
 private:
+    // Paging helper methods
+    int getPageSize() const;
+    bool needsPaging(int child_count) const;
+    QVector<JsonTreeItem*> createPagedChildren(int total_children);
+
     std::shared_ptr<JsonViewerStrategy> m_strategy;
     QString m_parent_pointer;
     quint64 m_byte_offset;
     quint64 m_byte_length;
-    JsonTreeItem*
-        m_parent_item;  // For verification only, not dereferenced in worker
+    // For verification only, not dereferenced in worker
+    JsonTreeItem* m_parent_item;
     QModelIndex m_parent_index;
+    int m_file_mode;   // File mode for paging logic
+    int m_page_start;  // Page range for virtual pages (-1 = not a virtual page)
+    int m_page_end;
 };

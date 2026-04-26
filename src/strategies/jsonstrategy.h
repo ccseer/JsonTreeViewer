@@ -18,12 +18,7 @@ constexpr qint64 LARGE_FILE_MAX  = 1024 * 1024 * 1024LL;
 /**
  * @brief Strategy type identifier
  */
-enum class StrategyType {
-    Small,
-    Medium,
-    Large,
-    Extreme
-};
+enum class StrategyType { Small, Medium, Large, Extreme };
 
 /**
  * @brief Base class for JSON viewing strategies
@@ -142,6 +137,21 @@ protected:
      */
     static quint32 countLocalBufferChildren(const char* base_ptr,
                                             size_t base_size);
+
+    /**
+     * @brief Count children at a specific JSON pointer location
+     * @param parent_pointer JSON pointer to navigate to
+     * @param base_ptr Pointer to the JSON buffer
+     * @param base_size Size of the JSON buffer
+     * @return Number of children at that location
+     *
+     * Helper method for counting children at a specific JSON pointer.
+     * If parent_pointer is empty, counts root children.
+     * Otherwise navigates to the pointer and counts children there.
+     */
+    static quint32 countChildrenAtPointer(const QString& parent_pointer,
+                                          const char* base_ptr,
+                                          size_t base_size);
 
     /**
      * @brief Parse children from a local buffer

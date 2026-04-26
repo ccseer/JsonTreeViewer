@@ -66,7 +66,7 @@ quint32 LargeFileStrategy::countChildren(const QString& parent_pointer,
                                          quint64 byte_offset,
                                          quint64 byte_length)
 {
-    return countLocalBufferChildren(dataPtr(), dataSize());
+    return countChildrenAtPointer(parent_pointer, dataPtr(), dataSize());
 }
 
 const char* LargeFileStrategy::dataPtr() const

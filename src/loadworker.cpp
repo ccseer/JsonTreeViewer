@@ -120,6 +120,9 @@ FetchWorker::FetchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
                          quint64 byte_length,
                          JsonTreeItem* parent_item,
                          const QModelIndex& parent_index,
+                         int file_mode,
+                         int page_start,
+                         int page_end,
                          QObject* parent)
     : QObject(parent),
       m_strategy(strategy),
@@ -127,7 +130,10 @@ FetchWorker::FetchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
       m_byte_offset(byte_offset),
       m_byte_length(byte_length),
       m_parent_item(parent_item),
-      m_parent_index(parent_index)
+      m_parent_index(parent_index),
+      m_file_mode(file_mode),
+      m_page_start(page_start),
+      m_page_end(page_end)
 {
     qprintt << "this";
 }
@@ -168,8 +174,50 @@ void FetchWorker::doFetch()
             qDeleteAll(*vec);
             delete vec;
         });
-    *children = m_strategy->extractChildren(m_parent_pointer, m_byte_offset,
-                                            m_byte_length);
+
+    // Check if this is a virtual page expansion
+    if (m_page_start >= 0 && m_page_end >= 0) {
+        // Virtual page: extract specific range, no paging needed
+        qprintt << "[FETCH ASYNC] Expanding virtual page [" << m_page_start
+                << ".." << m_page_end << "]";
+        *children = m_strategy->extractChildren(m_parent_pointer, m_byte_offset,
+                                                m_byte_length, m_page_start,
+                                                m_page_end);
+    }
+    else {
+        // Normal node: check if we might need paging based on cached
+        // child_count If child_count is already known and below threshold, skip
+        // counting
+        quint32 child_count = m_parent_item->child_count;
+
+        if (child_count > 0 && !needsPaging(child_count)) {
+            // Small node with known count - extract directly without counting
+            // again
+            qprintt << "[FETCH ASYNC] Small node (cached count=" << child_count
+                    << "), extracting directly";
+            *children = m_strategy->extractChildren(
+                m_parent_pointer, m_byte_offset, m_byte_length);
+        }
+        else {
+            // Unknown count or potentially large - count first to decide on
+            // paging
+            child_count = m_strategy->countChildren(
+                m_parent_pointer, m_byte_offset, m_byte_length);
+            qprintt << "[FETCH ASYNC] Counted" << child_count << "children";
+
+            qprintt << "[FETCH ASYNC] child_count=" << child_count
+                    << ", needsPaging=" << needsPaging(child_count);
+
+            // Apply paging logic if needed
+            if (needsPaging(child_count)) {
+                *children = createPagedChildren(child_count);
+            }
+            else {
+                *children = m_strategy->extractChildren(
+                    m_parent_pointer, m_byte_offset, m_byte_length);
+            }
+        }
+    }
 
     // 4. Check for interruption after extraction
     if (QThread::currentThread()->isInterruptionRequested()) {
@@ -185,4 +233,57 @@ void FetchWorker::doFetch()
 
     // 5. Send data to main thread
     emit fetchCompleted(children, m_parent_item, m_parent_index, elapsed);
+}
+
+int FetchWorker::getPageSize() const
+{
+    switch (m_file_mode) {
+    case 0:  // Small
+        return 10000;
+    case 1:  // Medium
+        return 1000;
+    case 2:  // Large
+        return 500;
+    case 3:  // Extreme
+        return 100;
+    }
+    return 1000;
+}
+
+bool FetchWorker::needsPaging(int child_count) const
+{
+    return child_count > getPageSize();
+}
+
+QVector<JsonTreeItem*> FetchWorker::createPagedChildren(int total_children)
+{
+    QVector<JsonTreeItem*> paged_children;
+    int page_size = getPageSize();
+    int total     = total_children;
+
+    // Create virtual page nodes
+    for (int start = 0; start < total; start += page_size) {
+        int end = qMin(start + page_size - 1, total - 1);
+
+        // Create virtual page node
+        QString page_key        = QString("[%1..%2]").arg(start).arg(end);
+        JsonTreeItem* page_node = new JsonTreeItem(
+            page_key, m_parent_pointer,
+            static_cast<char>(simdjson::ondemand::json_type::array));
+
+        page_node->is_virtual_page = true;
+        page_node->page_start      = start;
+        page_node->page_end        = end;
+        page_node->has_children    = true;
+        page_node->parent          = m_parent_item;
+        page_node->byte_offset     = m_byte_offset;
+        page_node->byte_length     = m_byte_length;
+
+        paged_children.append(page_node);
+    }
+
+    qprintt << "[FETCH ASYNC] Created" << paged_children.size()
+            << "virtual pages for" << total_children << "items";
+
+    return paged_children;
 }

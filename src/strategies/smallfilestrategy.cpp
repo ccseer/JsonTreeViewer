@@ -49,8 +49,7 @@ quint32 SmallFileStrategy::countChildren(const QString& parent_pointer,
                                          quint64 byte_offset,
                                          quint64 byte_length)
 {
-    // For small files, we use the entire buffer
-    return countLocalBufferChildren(dataPtr(), dataSize());
+    return countChildrenAtPointer(parent_pointer, dataPtr(), dataSize());
 }
 
 const char* SmallFileStrategy::dataPtr() const

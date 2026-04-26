@@ -78,9 +78,6 @@ private slots:
 private:
     JsonTreeItem* getItem(const QModelIndex& index) const;
 
-    // Helper method for extracting children (used by loadEverything)
-    QVector<JsonTreeItem*> extractChildren(JsonTreeItem* parent_item);
-
     // Paging support
     int getPageSize(FileMode mode) const;
     bool needsPaging(int child_count, FileMode mode) const;
