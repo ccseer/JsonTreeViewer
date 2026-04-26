@@ -7,6 +7,8 @@
 #include <QString>
 #include <QVector>
 
+#include "../common.h"
+
 class JsonTreeItem;
 
 namespace StrategyThresholds {
@@ -14,11 +16,6 @@ constexpr qint64 SMALL_FILE_MAX  = 10 * 1024 * 1024;
 constexpr qint64 MEDIUM_FILE_MAX = 100 * 1024 * 1024;
 constexpr qint64 LARGE_FILE_MAX  = 1024 * 1024 * 1024LL;
 }  // namespace StrategyThresholds
-
-/**
- * @brief Strategy type identifier
- */
-enum class StrategyType { Small, Medium, Large, Extreme };
 
 /**
  * @brief Base class for JSON viewing strategies
@@ -51,7 +48,7 @@ public:
      * @brief Get the type of this strategy
      * @return Strategy type identifier
      */
-    virtual StrategyType type() const = 0;
+    virtual FileMode type() const = 0;
 
     /**
      * @brief Initialize the strategy by loading the file

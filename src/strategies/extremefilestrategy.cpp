@@ -1,7 +1,5 @@
 #include "extremefilestrategy.h"
 
-#include "../logging.h"
-
 #define qprintt qprint << "[ExtremeFileStrategy]"
 
 ExtremeFileStrategy::ExtremeFileStrategy()  = default;

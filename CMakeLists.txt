@@ -45,13 +45,13 @@ add_library(jsontreeviewer SHARED
     src/jsontreeviewer.cpp
     src/memorymappedfile.cpp
     src/loadworker.cpp
+    src/common.h
     src/jsonnode.h
     src/jsontreemodel.h
     src/jsontreeview.h
     src/jsontreeviewer.h
     src/memorymappedfile.h
     src/loadworker.h
-    src/logging.h
     src/strategies/jsonstrategy.h
     src/strategies/jsonstrategy.cpp
     src/strategies/smallfilestrategy.h

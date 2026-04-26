@@ -3,12 +3,14 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUrl>
 
 #include "jsonnode.h"
 #include "jsontreemodel.h"
@@ -122,6 +124,8 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
 
     m_view = new JsonTreeView(this);
     m_view->setCopyActions(m->supportedActions());
+    m_view->setFileMode(
+        FileMode::Small);  // Default to Small, will be updated after load
     m_view->setModel(proxy_model);
     lay_content->addWidget(m_view);
 
@@ -332,6 +336,47 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                                 tr("Exported to:\n%1").arg(filePath));
             });
 
+    connect(m_view, &JsonTreeView::collapseAllRequested, this,
+            [this]() { m_view->collapseAll(); });
+
+    connect(m_view, &JsonTreeView::expandAllRequested, this,
+            [this]() { m_view->expandAll(); });
+
+    connect(m_view, &JsonTreeView::openUrlRequested, this,
+            [this](const QString& url) {
+                if (!QDesktopServices::openUrl(QUrl(url))) {
+                    emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                    tr("Failed to open URL:\n%1").arg(url));
+                }
+            });
+
+    connect(m_view, &JsonTreeView::copyTimestampAsIso8601Requested, this,
+            [this](const QString& value) {
+                bool ok;
+                qint64 num = value.toLongLong(&ok);
+                if (!ok) {
+                    emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                    tr("Invalid timestamp"));
+                    return;
+                }
+
+                QDateTime dt;
+                if (value.length() == 10) {
+                    dt = QDateTime::fromSecsSinceEpoch(num, Qt::UTC);
+                }
+                else if (value.length() == 13) {
+                    dt = QDateTime::fromMSecsSinceEpoch(num, Qt::UTC);
+                }
+                else {
+                    emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                    tr("Invalid timestamp"));
+                    return;
+                }
+
+                QString iso8601 = dt.toString(Qt::ISODate);
+                QApplication::clipboard()->setText(iso8601);
+            });
+
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();
         m_btn_text_view = new QPushButton(this);
@@ -385,6 +430,7 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             }
 
             m_view->setCopyActions(model->supportedActions());
+            m_view->setFileMode(model->fileMode());
 
             qprintt << "[BG LOAD] Adding info icon...";
 
@@ -399,7 +445,7 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
                                     .arg(m_load_time_ms / 1000.0, 0, 'f', 2);
 
                 // Add file mode specific info
-                using FM = JsonTreeModel::FileMode;
+                using FM = FileMode;
                 if (model->fileMode() == FM::Extreme) {
                     tooltipLines
                         << "" << tr("Extreme file (>1 GB):")

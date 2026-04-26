@@ -1,6 +1,6 @@
 #include "memorymappedfile.h"
 
-#include "logging.h"
+#include "common.h"
 
 #define qprintt qprint << "[MemoryMappedFile]"
 

@@ -3,6 +3,7 @@
 #include <QQueue>
 #include <QSortFilterProxyModel>
 
+#include "common.h"
 #include "strategies/jsonstrategy.h"
 
 class JsonTreeItem;
@@ -13,8 +14,6 @@ class JsonTreeModel : public QAbstractItemModel {
 public:
     using CopyActions = JsonViewerStrategy::CopyActions;
     using CopyAction  = JsonViewerStrategy::CopyAction;
-
-    enum class FileMode { Small, Medium, Large, Extreme };
 
     explicit JsonTreeModel(QObject* parent = nullptr);
     ~JsonTreeModel() override;

@@ -10,7 +10,6 @@
 
 #include "jsonnode.h"
 #include "loadworker.h"
-#include "logging.h"
 #include "strategies/jsonstrategy.h"
 
 using namespace simdjson;
@@ -105,21 +104,8 @@ void JsonTreeModel::onLoadCompleted(
     m_root_item   = root.get();  // Raw pointer for quick access
     m_strategy    = strategy;    // shared_ptr assignment keeps strategy alive
 
-    // Determine file mode based on strategy type
-    switch (strategy->type()) {
-    case StrategyType::Small:
-        m_file_mode = FileMode::Small;
-        break;
-    case StrategyType::Medium:
-        m_file_mode = FileMode::Medium;
-        break;
-    case StrategyType::Large:
-        m_file_mode = FileMode::Large;
-        break;
-    case StrategyType::Extreme:
-        m_file_mode = FileMode::Extreme;
-        break;
-    }
+    // Strategy type is now FileMode, so we can assign directly
+    m_file_mode = strategy->type();
 
     endResetModel();
 
@@ -674,11 +660,12 @@ void JsonTreeModel::processFetchQueue()
     }
 
     // Create background thread with no parent for true async cleanup
-    auto* thread                 = new JTVThread;
-    QPointer<FetchWorker> worker = new FetchWorker(
-        m_strategy, fetch_pointer, fetch_offset, fetch_length, item, parent,
-        static_cast<int>(m_file_mode), page_start, page_end,
-        item->child_count);  // Pass cached count to avoid cross-thread access
+    auto* thread = new JTVThread;
+    QPointer<FetchWorker> worker
+        = new FetchWorker(m_strategy, fetch_pointer, fetch_offset, fetch_length,
+                          item, parent, m_file_mode, page_start, page_end,
+                          // Pass cached count to avoid cross-thread access
+                          item->child_count);
     connect(this, &QObject::destroyed, [worker, thread]() {
         if (worker) {
             qprintt

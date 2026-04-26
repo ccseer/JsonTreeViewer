@@ -134,3 +134,34 @@ set_tests_properties(AsyncLoadingTests PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+# String parsing test executable
+add_executable(test_string_parsing
+    test_string_parsing.cpp
+    ../src/jsontreemodel.cpp
+    ../src/loadworker.cpp
+    ../src/jsonnode.h
+    ../src/strategies/jsonstrategy.cpp
+    ../src/strategies/smallfilestrategy.cpp
+    ../src/strategies/mediumfilestrategy.cpp
+    ../src/strategies/largefilestrategy.cpp
+    ../src/strategies/extremefilestrategy.cpp
+    ../src/memorymappedfile.cpp
+)
+
+target_include_directories(test_string_parsing PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+)
+
+target_link_libraries(test_string_parsing PRIVATE
+    simdjson_static
+    Qt6::Core
+    Qt6::Test
+)
+
+# Add string parsing test
+add_test(NAME StringParsingTests COMMAND test_string_parsing)
+
+set_tests_properties(StringParsingTests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)

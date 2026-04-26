@@ -51,7 +51,7 @@ private:
     JsonTreeModel* model = nullptr;
 
     void loadAndVerify(const QString& filename,
-                       JsonTreeModel::FileMode expectedMode,
+                       FileMode expectedMode,
                        qint64 maxLoadTime);
 
     // Helper: Wait for async load to complete
@@ -146,7 +146,7 @@ void TestStrategies::cleanupTestCase()
 // __CONTINUE_HERE__
 
 void TestStrategies::loadAndVerify(const QString& filename,
-                                   JsonTreeModel::FileMode expectedMode,
+                                   FileMode expectedMode,
                                    qint64 maxLoadTime)
 {
     QString path = testDir + filename;
@@ -176,10 +176,10 @@ void TestStrategies::loadAndVerify(const QString& filename,
 
     qDebug() << "  Load time:" << loadTime << "ms";
     qDebug() << "  Strategy:"
-             << (expectedMode == JsonTreeModel::FileMode::Small    ? "Small"
-                 : expectedMode == JsonTreeModel::FileMode::Medium ? "Medium"
-                 : expectedMode == JsonTreeModel::FileMode::Large  ? "Large"
-                                                                   : "Extreme");
+             << (expectedMode == FileMode::Small    ? "Small"
+                 : expectedMode == FileMode::Medium ? "Medium"
+                 : expectedMode == FileMode::Large  ? "Large"
+                                                    : "Extreme");
 
     // Note: With async loading, root children are not loaded yet
     // They will be loaded on-demand via fetchMore
@@ -189,17 +189,17 @@ void TestStrategies::loadAndVerify(const QString& filename,
 
 void TestStrategies::testStrategySelection_1k()
 {
-    loadAndVerify("1k.json", JsonTreeModel::FileMode::Small, 100);
+    loadAndVerify("1k.json", FileMode::Small, 100);
 }
 
 void TestStrategies::testStrategySelection_11M()
 {
-    loadAndVerify("11M.json", JsonTreeModel::FileMode::Medium, 1000);
+    loadAndVerify("11M.json", FileMode::Medium, 1000);
 }
 
 void TestStrategies::testStrategySelection_101M()
 {
-    loadAndVerify("101M.json", JsonTreeModel::FileMode::Large, 5000);
+    loadAndVerify("101M.json", FileMode::Large, 5000);
 }
 
 void TestStrategies::testStrategySelection_1G()
@@ -216,7 +216,7 @@ void TestStrategies::testStrategySelection_1G()
     if (!loaded) {
         QSKIP("1GB file load timeout (expected for very large files)");
     }
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Extreme);
+    QCOMPARE(model->fileMode(), FileMode::Extreme);
 }
 
 void TestStrategies::testSmallFileLoad()
@@ -254,7 +254,7 @@ void TestStrategies::testMediumFileLoad()
 
     model->load(path);
     QVERIFY(waitForLoad(model));
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Medium);
+    QCOMPARE(model->fileMode(), FileMode::Medium);
 
     // Load root children
     loadRootChildren(model);
@@ -271,7 +271,7 @@ void TestStrategies::testLargeFileLoad()
 
     model->load(path);
     QVERIFY(waitForLoad(model));
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Large);
+    QCOMPARE(model->fileMode(), FileMode::Large);
 
     // Load root children
     loadRootChildren(model);
@@ -292,7 +292,7 @@ void TestStrategies::testExtremeFileLoad()
     if (!loaded) {
         QSKIP("1GB file load timeout (expected for very large files)");
     }
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Extreme);
+    QCOMPARE(model->fileMode(), FileMode::Extreme);
 
     // Load root children
     loadRootChildren(model);
@@ -377,7 +377,7 @@ void TestStrategies::testLargeFileMemory()
 
     // Note: Actual memory measurement would require platform-specific APIs
     // This test just verifies the file loads successfully with Large strategy
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Large);
+    QCOMPARE(model->fileMode(), FileMode::Large);
 
     qDebug() << "Large file loaded successfully";
     qDebug() << "File size:" << fileSize / (1024 * 1024) << "MB";

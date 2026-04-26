@@ -1,7 +1,5 @@
 #include "largefilestrategy.h"
 
-#include "../logging.h"
-
 #define qprintt qprint << "[LargeFileStrategy]"
 
 LargeFileStrategy::LargeFileStrategy()  = default;

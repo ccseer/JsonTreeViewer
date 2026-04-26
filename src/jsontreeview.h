@@ -2,7 +2,11 @@
 
 #include <QTreeView>
 
+#include "common.h"
 #include "strategies/jsonstrategy.h"
+
+// Forward declaration
+class JsonTreeModel;
 
 class JsonTreeView : public QTreeView {
     Q_OBJECT
@@ -16,6 +20,11 @@ public:
     {
         m_copyActions = actions;
     }
+    void setFileMode(FileMode mode)
+    {
+        m_file_mode = mode;
+    }
+    void setModel(QAbstractItemModel* model) override;
 
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -29,9 +38,14 @@ signals:
     void copyKeyValueRequested(const QModelIndex& index);
     void copySubtreeRequested(const QModelIndex& index);
     void exportSelectionRequested(const QModelIndex& index);
+    void collapseAllRequested();
+    void expandAllRequested();
+    void openUrlRequested(const QString& url);
+    void copyTimestampAsIso8601Requested(const QString& value);
 
 private:
-    bool m_firstResize = true;
+    bool m_firstResize   = true;
+    FileMode m_file_mode = FileMode::Small;
     CopyActions m_copyActions{JsonViewerStrategy::CopyAction::Key
                               | JsonViewerStrategy::CopyAction::Value
                               | JsonViewerStrategy::CopyAction::Path

@@ -9,7 +9,10 @@ public:
     MediumFileStrategy();
     ~MediumFileStrategy() override;
 
-    StrategyType type() const override { return StrategyType::Medium; }
+    FileMode type() const override
+    {
+        return FileMode::Medium;
+    }
 
     bool initialize(const QString& path) override;
 

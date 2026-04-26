@@ -9,7 +9,10 @@ public:
     SmallFileStrategy();
     ~SmallFileStrategy() override;
 
-    StrategyType type() const override { return StrategyType::Small; }
+    FileMode type() const override
+    {
+        return FileMode::Small;
+    }
 
     bool initialize(const QString& path) override;
 

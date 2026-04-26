@@ -5,7 +5,6 @@
 #include <limits>
 
 #include "../jsonnode.h"
-#include "../logging.h"
 #include "extremefilestrategy.h"
 #include "largefilestrategy.h"
 #include "mediumfilestrategy.h"
@@ -25,13 +24,44 @@ QPair<char, QString> typeAndPreviewFromRaw(const char* data_ptr,
         return {'?', {}};
     char first = data_ptr[offset];
     if (first == '{')
-        return {'{', QString("{%1}").arg(g_type_obj)};
+        return {'{', "Object"};
     if (first == '[')
-        return {'[', QString("[%1]").arg(g_type_arr)};
+        return {'[', "Array"};
     if (first == '"') {
-        size_t content_len = length > 2 ? length - 2 : 0;
-        if (content_len > 100)
+        // String: raw_tok includes quotes, so we need to skip them
+        // Check if we actually have both opening and closing quotes
+        if (length < 2)
+            return {'s', {}};
+
+        // Find the actual closing quote by properly handling escape sequences
+        size_t content_len = 0;
+        for (size_t i = 1; i < length; ++i) {
+            if (data_ptr[offset + i] == '"') {
+                // Count consecutive backslashes before this quote
+                size_t backslash_count = 0;
+                for (size_t j = i - 1; j > 0 && data_ptr[offset + j] == '\\';
+                     --j) {
+                    backslash_count++;
+                }
+                // If backslash count is even (including 0), this quote is not
+                // escaped
+                if (backslash_count % 2 == 0) {
+                    content_len = i - 1;
+                    break;
+                }
+            }
+        }
+
+        if (content_len == 0) {
+            // Didn't find closing quote, use length - 2 as fallback
+            content_len = length > 2 ? length - 2 : 0;
+        }
+
+        if (content_len > 100) {
+            // Truncate long strings
             return {'s', QString::fromUtf8(data_ptr + offset + 1, 100) + "..."};
+        }
+        // Return string content without quotes
         return {'s', QString::fromUtf8(data_ptr + offset + 1,
                                        static_cast<int>(content_len))};
     }

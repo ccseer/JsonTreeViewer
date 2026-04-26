@@ -8,7 +8,10 @@ public:
     ExtremeFileStrategy();
     ~ExtremeFileStrategy() override;
 
-    StrategyType type() const override { return StrategyType::Extreme; }
+    FileMode type() const override
+    {
+        return FileMode::Extreme;
+    }
 
     bool initialize(const QString& path) override;
 

@@ -4,7 +4,6 @@
 #include <QScopeGuard>
 
 #include "jsonnode.h"
-#include "logging.h"
 #include "strategies/extremefilestrategy.h"
 #include "strategies/jsonstrategy.h"
 #include "strategies/largefilestrategy.h"
@@ -120,7 +119,7 @@ FetchWorker::FetchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
                          quint64 byte_length,
                          JsonTreeItem* parent_item,
                          const QModelIndex& parent_index,
-                         int file_mode,
+                         FileMode file_mode,
                          int page_start,
                          int page_end,
                          quint32 cached_child_count,
@@ -240,13 +239,13 @@ void FetchWorker::doFetch()
 int FetchWorker::getPageSize() const
 {
     switch (m_file_mode) {
-    case 0:  // Small
+    case FileMode::Small:
         return 10000;
-    case 1:  // Medium
+    case FileMode::Medium:
         return 1000;
-    case 2:  // Large
+    case FileMode::Large:
         return 500;
-    case 3:  // Extreme
+    case FileMode::Extreme:
         return 100;
     }
     return 1000;

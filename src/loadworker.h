@@ -6,6 +6,8 @@
 #include <QVector>
 #include <memory>
 
+#include "common.h"
+
 class JsonTreeItem;
 class JsonViewerStrategy;
 
@@ -111,7 +113,7 @@ public:
                          quint64 byte_length,
                          JsonTreeItem* parent_item,
                          const QModelIndex& parent_index,
-                         int file_mode,
+                         FileMode file_mode,
                          int page_start             = -1,
                          int page_end               = -1,
                          quint32 cached_child_count = 0,
@@ -166,7 +168,7 @@ private:
     // For verification only, not dereferenced in worker
     JsonTreeItem* m_parent_item;
     QModelIndex m_parent_index;
-    int m_file_mode;   // File mode for paging logic
+    FileMode m_file_mode;  // File mode for paging logic
     int m_page_start;  // Page range for virtual pages (-1 = not a virtual page)
     int m_page_end;
     quint32 m_cached_child_count;  // Cached from main thread to avoid

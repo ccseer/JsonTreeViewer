@@ -1,7 +1,6 @@
 #include "mediumfilestrategy.h"
 
 #include "../jsonnode.h"
-#include "../logging.h"
 
 #define qprintt qprint << "[MediumFileStrategy]"
 

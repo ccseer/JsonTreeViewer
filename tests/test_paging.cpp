@@ -214,7 +214,7 @@ void TestPaging::testSmallArrayNoPaging()
 
     model->load(path);
     QVERIFY(waitForLoad(model));
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Small);
+    QCOMPARE(model->fileMode(), FileMode::Small);
 
     // Load root children
     loadRootChildren(model);
@@ -264,7 +264,7 @@ void TestPaging::testSmallFileNoPaging_2000Items()
     model->load(path);
     QVERIFY(waitForLoad(model));
     // File is small (< 10MB), so it uses SmallFileStrategy
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Small);
+    QCOMPARE(model->fileMode(), FileMode::Small);
 
     // Load root children
     loadRootChildren(model);
@@ -338,7 +338,7 @@ void TestPaging::testLargeArrayPaging()
 
     model->load(path);
     QVERIFY(waitForLoad(model));
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Large);
+    QCOMPARE(model->fileMode(), FileMode::Large);
 
     // Load root children
     loadRootChildren(model);
@@ -402,7 +402,7 @@ void TestPaging::testExtremeArrayPaging()
     if (!loaded) {
         QSKIP("1.2GB file load timeout (expected for very large files)");
     }
-    QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Extreme);
+    QCOMPARE(model->fileMode(), FileMode::Extreme);
 
     // Load root children (use longer timeout for 1.2GB file - extraction takes
     // ~31 seconds)
@@ -659,7 +659,7 @@ void TestPaging::testPageSizeThresholds()
         model = new JsonTreeModel(this);
         model->load(path);
         QVERIFY(waitForLoad(model));
-        QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Small);
+        QCOMPARE(model->fileMode(), FileMode::Small);
 
         // Load root children
         loadRootChildren(model);
@@ -691,7 +691,7 @@ void TestPaging::testPageSizeThresholds()
         model = new JsonTreeModel(this);
         model->load(path);
         QVERIFY(waitForLoad(model));
-        QCOMPARE(model->fileMode(), JsonTreeModel::FileMode::Small);
+        QCOMPARE(model->fileMode(), FileMode::Small);
 
         // Load root children
         loadRootChildren(model);

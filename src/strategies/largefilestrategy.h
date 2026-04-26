@@ -8,9 +8,9 @@ public:
     LargeFileStrategy();
     ~LargeFileStrategy() override;
 
-    StrategyType type() const override
+    FileMode type() const override
     {
-        return StrategyType::Large;
+        return FileMode::Large;
     }
 
     bool initialize(const QString& path) override;

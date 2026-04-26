@@ -1,7 +1,6 @@
 #include "smallfilestrategy.h"
 
 #include "../jsonnode.h"
-#include "../logging.h"
 
 #define qprintt qprint << "[SmallFileStrategy]"
 
