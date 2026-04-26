@@ -124,7 +124,7 @@ void TestStrategies::initTestCase()
     }
 
     // Verify test files exist
-    QStringList testFiles = {"1k.json", "11M.json", "101M.json", "1.01G.json"};
+    QStringList testFiles = {"1k.json", "11M.json", "101M.json", "1101M.json"};
     for (const QString& file : testFiles) {
         QString path = testDir + file;
         if (!QFile::exists(path)) {
@@ -204,9 +204,9 @@ void TestStrategies::testStrategySelection_101M()
 
 void TestStrategies::testStrategySelection_1G()
 {
-    // NOTE: This test loads a 1.01GB file which may take 30+ seconds
+    // NOTE: This test loads a 1101M file which may take 30+ seconds
     // Increase timeout to 60 seconds for large file loading
-    QString path = testDir + "1.01G.json";
+    QString path = testDir + "1101M.json";
     if (model)
         delete model;
     model = new JsonTreeModel(this);
@@ -281,8 +281,8 @@ void TestStrategies::testLargeFileLoad()
 
 void TestStrategies::testExtremeFileLoad()
 {
-    // NOTE: This test loads a 1.01GB file which may take 30+ seconds
-    QString path = testDir + "1.01G.json";
+    // NOTE: This test loads a 1101M file which may take 30+ seconds
+    QString path = testDir + "1101M.json";
     if (model)
         delete model;
     model = new JsonTreeModel(this);

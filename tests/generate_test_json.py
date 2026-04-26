@@ -2,24 +2,31 @@ import json
 import os
 import sys
 
+# === CONFIGURATION ===
+# All generated test files will be saved in this directory.
+# Default is the project root (parent of the 'tests' folder).
+
+# SAVE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SAVE_DIR = r"C:\Users\corey\Dev\build_output\JsonTreeViewer"
+
+# =====================
+
 
 def generate_json_file(filename, target_size_bytes):
     """
     Generates a JSON file of approximately the target size.
     It uses an array of objects to make it look like 'real' data.
     """
-    print(f"Generating {filename} (Target: {target_size_bytes} bytes)...")
+    full_path = os.path.join(SAVE_DIR, filename)
+    print(f"Generating {full_path} (Target: {target_size_bytes} bytes)...")
 
     if target_size_bytes < 100:
         # Small file fallback
-        with open(filename, "w", encoding="utf-8") as f:
+        with open(full_path, "w", encoding="utf-8") as f:
             json.dump({"message": "small file", "size": target_size_bytes}, f)
         return
 
-    # Buffer for writing to disk
-    buffer_size = 1024 * 1024  # 1MB buffer
-
-    with open(filename, "w", encoding="utf-8") as f:
+    with open(full_path, "w", encoding="utf-8") as f:
         f.write("[")
         current_size = 1  # '['
 
@@ -73,97 +80,99 @@ def generate_json_file(filename, target_size_bytes):
                 sys.stdout.flush()
 
         # Final padding to get close to the exact size
-        # We want to end with ']'
-        # Remaining space: target_size_bytes - current_size - 1 (for ']')
         remaining = target_size_bytes - current_size - 1
 
-        if remaining > 20:  # If we have enough space for a final object
+        if remaining > 20:
             if count > 0:
                 f.write(",")
                 remaining -= 1
-            # Create a padding object
-            # {"padding": "..."}
-            padding_overhead = 15  # '{"padding": ""}' is about 15 chars
+            padding_overhead = 15
             if remaining > padding_overhead:
                 padding_str = "x" * (remaining - padding_overhead)
                 final_obj = {"padding": padding_str}
                 s_final = json.dumps(final_obj)
-                # Adjust for potential escaped characters if any (though 'x' won't escape)
-                actual_final_len = len(s_final.encode("utf-8"))
-                if actual_final_len != remaining:
-                    # Fine-tune
-                    diff = actual_final_len - remaining
-                    final_obj["padding"] = "x" * (len(padding_str) - diff)
-                    s_final = json.dumps(final_obj)
                 f.write(s_final)
             else:
-                # Just write a small object if space is tight
                 f.write(json.dumps({"end": True}))
 
         f.write("]")
 
-    actual_size = os.path.getsize(filename)
-    print(
-        f"\rDone: {filename} - Actual: {actual_size} bytes (Target: {target_size_bytes})"
-    )
+    actual_size = os.path.getsize(full_path)
+    print(f"\rDone: {full_path} - Actual: {actual_size} bytes")
+
+
+def generate_broken_large_json(filename, target_size_mb=120):
+    """
+    Generates a large JSON file with intentional syntax errors for testing error reporting.
+    """
+    full_path = os.path.join(SAVE_DIR, filename)
+    target_size_bytes = target_size_mb * 1024 * 1024
+    print(f"Generating {full_path} (Target: {target_size_mb} MB broken JSON)...")
+
+    with open(full_path, "w", encoding="utf-8") as f:
+        f.write('{\n  "status": "success",\n  "data": [\n')
+        current_size = f.tell()
+        item_id = 0
+        while current_size < target_size_bytes - 1024:
+            item = f'    {{"id": {item_id}, "name": "item_{item_id}", "payload": "{"x"*60}"}},\n'
+            f.write(item)
+            item_id += 1
+            current_size += len(item)
+
+        # Intentionally corrupt the file near the end
+        f.write(f'    {{"id": {item_id}, "error_here": "Invalid escape \\x", \n')
+        f.write('    "incomplete_object": {"key": "no_closing_quote\n')
+        # File ends here without closing tags
 
 
 if __name__ == "__main__":
-    # 1k = 1024
-    # 11M = 11 * 1024 * 1024
-    # 101M = 101 * 1024 * 1024
-    # 1.01G = 1.01 * 1024 * 1024 * 1024
+    # Ensure save directory exists
+    if not os.path.exists(SAVE_DIR):
+        os.makedirs(SAVE_DIR)
 
-    configs = [
+    # 1. Base Strategy Test Files
+    print("=== Generating Base Strategy Test Files ===")
+    base_configs = [
         ("1k.json", 1024),
         ("11M.json", 11 * 1024 * 1024),
         ("101M.json", 101 * 1024 * 1024),
-        ("1.01G.json", int(1.01 * 1024 * 1024 * 1024)),
+        ("1101M.json", 1101 * 1024 * 1024),
     ]
 
-    for filename, size in configs:
+    for filename, size in base_configs:
         generate_json_file(filename, size)
 
-    # Phase 13: Async loading test files
-    print("\n=== Generating Phase 13 test files ===")
+    # 2. Phase 13: Async Loading Test Files
+    print("\n=== Generating Phase 13 Test Files ===")
 
-    # Determine project root (parent of tests directory)
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Helper for standard JSON dumps
+    def dump_test_file(filename, data, indent=None):
+        full_path = os.path.join(SAVE_DIR, filename)
+        print(f"Generating {full_path}...")
+        with open(full_path, "w") as f:
+            json.dump(data, f, indent=indent)
 
-    # test_100k_array.json - 100k element array
-    print("Generating test_100k_array.json (100,000 elements)...")
-    data = [{"id": i, "name": f"item_{i}", "value": i * 2} for i in range(100000)]
-    test_file = os.path.join(project_root, "test_100k_array.json")
-    with open(test_file, "w") as f:
-        json.dump(data, f)
-    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+    dump_test_file(
+        "test_100k_array.json",
+        [{"id": i, "name": f"item_{i}", "value": i * 2} for i in range(100000)],
+    )
+    dump_test_file(
+        "test_100k_object.json",
+        {f"key_{i}": {"id": i, "value": i * 2} for i in range(100000)},
+    )
 
-    # test_100k_object.json - 100k field object
-    print("Generating test_100k_object.json (100,000 fields)...")
-    data = {f"key_{i}": {"id": i, "value": i * 2} for i in range(100000)}
-    test_file = os.path.join(project_root, "test_100k_object.json")
-    with open(test_file, "w") as f:
-        json.dump(data, f)
-    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
-
-    # test_nested.json - deeply nested structure
-    print("Generating test_nested.json (100 levels of nesting)...")
-    data = {"level": 0}
-    current = data
+    # Nested data
+    data_nested = {"level": 0}
+    curr = data_nested
     for i in range(1, 100):
-        current["child"] = {"level": i}
-        current = current["child"]
-    test_file = os.path.join(project_root, "test_nested.json")
-    with open(test_file, "w") as f:
-        json.dump(data, f, indent=2)
-    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+        curr["child"] = {"level": i}
+        curr = curr["child"]
+    dump_test_file("test_nested.json", data_nested, indent=2)
 
-    # test_empty.json - empty object
-    print("Generating test_empty.json (empty object)...")
-    test_file = os.path.join(project_root, "test_empty.json")
-    with open(test_file, "w") as f:
-        json.dump({}, f)
-    print(f"Created {test_file} ({os.path.getsize(test_file)} bytes)")
+    dump_test_file("test_empty.json", {})
 
-    print("\n=== All test files generated successfully ===")
+    # 3. Phase 22: Error Reporting Test Files
+    print("\n=== Generating Phase 22 Test Files ===")
+    generate_broken_large_json("test_broken_large.json", 120)
 
+    print(f"\n=== All test files generated successfully in: {SAVE_DIR} ===")
