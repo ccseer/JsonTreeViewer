@@ -1,6 +1,7 @@
 #include "jsontreeview.h"
 
 #include <QContextMenuEvent>
+#include <QHeaderView>
 #include <QMenu>
 #include <QTimer>
 
@@ -9,6 +10,7 @@ JsonTreeView::JsonTreeView(QWidget* parent) : QTreeView(parent)
     setUniformRowHeights(true);
     setAnimated(false);
     setContextMenuPolicy(Qt::DefaultContextMenu);
+    header()->setStretchLastSection(true);
 }
 
 void JsonTreeView::upadteDPR(qreal r)
@@ -64,4 +66,14 @@ void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
         emit copyKeyValueRequested(index);
     else if (selected == copySubtreeAction)
         emit copySubtreeRequested(index);
+}
+
+void JsonTreeView::resizeEvent(QResizeEvent* event)
+{
+    QTreeView::resizeEvent(event);
+
+    if (m_firstResize && width() > 40) {
+        header()->resizeSection(0, width() / 3);
+        m_firstResize = false;
+    }
 }

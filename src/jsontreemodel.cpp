@@ -562,6 +562,9 @@ void JsonTreeModel::fetchMoreAsync(const QModelIndex& parent)
     qprintt << "[FETCH ASYNC] Queued:" << item->key
             << "Queue size:" << m_fetch_queue.size();
 
+    // Emit queue changed signal
+    emit fetchQueueChanged(fetchQueueSize(), m_fetch_in_progress);
+
     // Process queue (will start if no fetch is active)
     processFetchQueue();
 }
@@ -578,6 +581,7 @@ void JsonTreeModel::processFetchQueue()
     // Get next item to process
     if (m_fetch_queue.isEmpty()) {
         qprintt << "[FETCH ASYNC] Queue empty, nothing to process";
+        emit fetchQueueChanged(0, false);
         return;
     }
 
@@ -590,6 +594,9 @@ void JsonTreeModel::processFetchQueue()
 
     // Mark as in progress
     m_fetch_in_progress = true;
+
+    // Emit queue changed signal
+    emit fetchQueueChanged(fetchQueueSize(), true);
 
     // Check if this is a virtual page
     int page_start        = -1;

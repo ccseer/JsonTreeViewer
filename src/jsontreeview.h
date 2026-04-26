@@ -19,6 +19,7 @@ public:
 
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 signals:
     void copyKeyRequested(const QModelIndex& index);
@@ -28,6 +29,7 @@ signals:
     void copySubtreeRequested(const QModelIndex& index);
 
 private:
+    bool m_firstResize = true;
     CopyActions m_copyActions{JsonViewerStrategy::CopyAction::Key
                               | JsonViewerStrategy::CopyAction::Value
                               | JsonViewerStrategy::CopyAction::Path

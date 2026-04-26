@@ -22,10 +22,16 @@ public:
     bool load(const QString& path);
     Q_SIGNAL void loadFinished(bool success, qint64 elapsedMs);
     Q_SIGNAL void firstFetchCompleted(qint64 totalElapsedMs);
+    Q_SIGNAL void fetchQueueChanged(int queueSize, bool inProgress);
 
     FileMode fileMode() const
     {
         return m_file_mode;
+    }
+
+    int fetchQueueSize() const
+    {
+        return m_fetch_queue.size() + (m_fetch_in_progress ? 1 : 0);
     }
 
     CopyActions supportedActions() const

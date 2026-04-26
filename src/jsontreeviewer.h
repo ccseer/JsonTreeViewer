@@ -28,17 +28,25 @@ private:
 
     void initTopWnd();
     void startBackgroundLoad(JsonTreeModel* model, const QString& path);
+    void updateStatusBarStats(JsonTreeModel* model);
+    QString formatFileSize(qint64 bytes) const;
 
     struct {
-        QWidget* wnd_bg   = nullptr; 
+        QWidget* wnd_bg   = nullptr;
         QLineEdit* filter = nullptr;
     } m_top;
 
+    struct {
+        QLabel* path_value = nullptr;  // Left: path and value
+        QLabel* stats      = nullptr;  // Center: node statistics
+        QLabel* info       = nullptr;  // Right: info icon with tooltip
+    } m_statusbar;
+
     QPushButton* m_btn_text_view;
-    QLabel* m_status_bar   = nullptr;
-    QLabel* m_warning_icon = nullptr;
 
     JsonTreeView* m_view;
+
+    qint64 m_load_time_ms = 0;
 };
 
 /////////////////////////////////////////////////////////////////
