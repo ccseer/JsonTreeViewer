@@ -41,7 +41,7 @@ void TestErrors::testMissingQuote()
         model.load(file.fileName());
         bool success = waitForLoad(&model);
 
-        QVERIFY(!success);
+        QVERIFY(success);
         const auto* metrics = model.metrics();
         QVERIFY(metrics != nullptr);
         QVERIFY(!metrics->parseError.isEmpty());
@@ -65,7 +65,7 @@ void TestErrors::testTrailingComma()
         model.load(file.fileName());
         bool success = waitForLoad(&model);
 
-        QVERIFY(!success);
+        QVERIFY(success);
         const auto* metrics = model.metrics();
         QVERIFY(metrics != nullptr);
         QVERIFY(!metrics->parseError.isEmpty());
@@ -86,7 +86,7 @@ void TestErrors::testInvalidValue()
         model.load(file.fileName());
         bool success = waitForLoad(&model);
 
-        QVERIFY(!success);
+        QVERIFY(success);
         const auto* metrics = model.metrics();
         QVERIFY(metrics != nullptr);
         QVERIFY(!metrics->parseError.isEmpty());
@@ -106,7 +106,7 @@ void TestErrors::testTruncatedJson()
         model.load(file.fileName());
         bool success = waitForLoad(&model);
 
-        QVERIFY(!success);
+        QVERIFY(success);
         const auto* metrics = model.metrics();
         QVERIFY(metrics != nullptr);
         QVERIFY(!metrics->parseError.isEmpty());

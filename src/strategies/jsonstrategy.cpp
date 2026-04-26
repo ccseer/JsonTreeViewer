@@ -124,8 +124,12 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                     break;
 
                 auto fv_res = field.value();
-                if (fv_res.error())
-                    continue;
+                if (fv_res.error()) {
+                    qprintt << "Field value error at index" << idx << ":"
+                            << simdjson::error_message(fv_res.error());
+                    break;  // Stop iteration - ondemand iterator state is
+                            // corrupted
+                }
                 auto fv = fv_res.value_unsafe();
 
                 auto raw_tok = fv.raw_json_token();
@@ -143,8 +147,12 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 auto [vt, vp] = typeAndPreviewFromRaw(base_ptr, abs_off, len);
 
                 auto key_res = field.unescaped_key();
-                if (key_res.error())
-                    continue;
+                if (key_res.error()) {
+                    qprintt << "Field key error at index" << idx << ":"
+                            << simdjson::error_message(key_res.error());
+                    break;  // Stop iteration - ondemand iterator state is
+                            // corrupted
+                }
                 std::string_view key = key_res.value_unsafe();
                 QString key_str = QString::fromUtf8(key.data(), key.size());
                 QString esc_key = key_str;
@@ -192,8 +200,10 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
 
                 auto ev_res = element;
                 if (ev_res.error()) {
-                    ++idx;
-                    continue;
+                    qprintt << "Array element error at index" << idx << ":"
+                            << simdjson::error_message(ev_res.error());
+                    break;  // Stop iteration - ondemand iterator state is
+                            // corrupted
                 }
                 auto ev = ev_res.value_unsafe();
 
@@ -285,45 +295,109 @@ JsonViewerStrategy::CountResult JsonViewerStrategy::countLocalBufferChildren(
     if (iter_result.error()) {
         QString error
             = QString::fromUtf8(simdjson::error_message(iter_result.error()));
-        qprintt << "JSON parse error:" << error;
-        return {0, error, 0};
+
+        // Use ondemand to find the exact error location
+        simdjson::ondemand::parser loc_parser;
+        auto loc_res
+            = loc_parser.iterate(base_ptr, base_size, base_size + padding);
+        quint64 offset = 0;
+
+        if (!loc_res.error()) {
+            auto& doc = loc_res.value_unsafe();
+            // Try to get the initial value to trigger the error and find its
+            // location
+            auto val_res = doc.get_value();
+            if (val_res.error()) {
+                auto pos_res = doc.current_location();
+                if (!pos_res.error()) {
+                    const char* pos = pos_res.value_unsafe();
+                    if (pos >= base_ptr && pos <= base_ptr + base_size) {
+                        offset = static_cast<quint64>(pos - base_ptr);
+                    }
+                }
+            }
+        }
+        else {
+            // If iteration failed immediately, try to get location from the
+            // result
+            auto pos_res = loc_res.current_location();
+            if (!pos_res.error()) {
+                const char* pos = pos_res.value_unsafe();
+                if (pos >= base_ptr && pos <= base_ptr + base_size) {
+                    offset = static_cast<quint64>(pos - base_ptr);
+                }
+            }
+        }
+
+        qprintt << "JSON parse error:" << error << "at exact offset:" << offset;
+        return {0, error, offset};
     }
     auto& doc = iter_result.value_unsafe();
 
-    // Try as object first
-    auto obj_res = doc.get_object();
-    if (!obj_res.error()) {
-        auto count_res = obj_res.value_unsafe().count_fields();
-        if (!count_res.error())
-            return {static_cast<quint32>(count_res.value_unsafe()), QString(),
-                    0};
+    // Determine type and count children
+    auto val_res = doc.get_value();
+    if (val_res.error()) {
+        // This is where we catch errors that happen right at the start
+        return {0, QString::fromUtf8(simdjson::error_message(val_res.error())),
+                0};
     }
 
-    // Try as array (need fresh parser)
-    simdjson::ondemand::parser parser2;
-    auto iter2 = parser2.iterate(base_ptr, base_size, base_size + padding);
-    if (!iter2.error()) {
-        auto arr_res = iter2.value_unsafe().get_array();
-        if (!arr_res.error()) {
-            auto count_res = arr_res.value_unsafe().count_elements();
-            if (!count_res.error())
-                return {static_cast<quint32>(count_res.value_unsafe()),
-                        QString(), 0};
-        }
+    auto val      = val_res.value_unsafe();
+    auto type_res = val.type();
+    if (type_res.error()) {
+        return {0, QString::fromUtf8(simdjson::error_message(type_res.error())),
+                0};
     }
 
-    // Capture specific error position if possible
-    simdjson::ondemand::parser parser3;
-    auto iter3 = parser3.iterate(base_ptr, base_size, base_size + padding);
-    if (!iter3.error()) {
-        auto& doc3 = iter3.value_unsafe();
-        // Trigger a deep parse to find the exact error location
-        auto val_res = doc3.get_value();
-        if (val_res.error()) {
+    auto type = type_res.value_unsafe();
+    if (type == simdjson::ondemand::json_type::object) {
+        auto obj_res = val.get_object();
+        if (obj_res.error()) {
+            // Fallback error location
             return {0,
-                    QString::fromUtf8(simdjson::error_message(val_res.error())),
+                    QString::fromUtf8(simdjson::error_message(obj_res.error())),
                     0};
         }
+        auto count_res = obj_res.value_unsafe().count_fields();
+        if (count_res.error()) {
+            // CRITICAL: Catch errors during field counting (deep syntax errors)
+            QString error
+                = QString::fromUtf8(simdjson::error_message(count_res.error()));
+            quint64 offset = 0;
+            auto pos_res   = doc.current_location();
+            if (!pos_res.error()) {
+                const char* pos = pos_res.value_unsafe();
+                if (pos >= base_ptr && pos <= base_ptr + base_size) {
+                    offset = static_cast<quint64>(pos - base_ptr);
+                }
+            }
+            return {0, error, offset};
+        }
+        return {static_cast<quint32>(count_res.value_unsafe()), QString(), 0};
+    }
+    else if (type == simdjson::ondemand::json_type::array) {
+        auto arr_res = val.get_array();
+        if (arr_res.error()) {
+            return {0,
+                    QString::fromUtf8(simdjson::error_message(arr_res.error())),
+                    0};
+        }
+        auto count_res = arr_res.value_unsafe().count_elements();
+        if (count_res.error()) {
+            // CRITICAL: Catch errors during element counting
+            QString error
+                = QString::fromUtf8(simdjson::error_message(count_res.error()));
+            quint64 offset = 0;
+            auto pos_res   = doc.current_location();
+            if (!pos_res.error()) {
+                const char* pos = pos_res.value_unsafe();
+                if (pos >= base_ptr && pos <= base_ptr + base_size) {
+                    offset = static_cast<quint64>(pos - base_ptr);
+                }
+            }
+            return {0, error, offset};
+        }
+        return {static_cast<quint32>(count_res.value_unsafe()), QString(), 0};
     }
 
     return {0, QString(), 0};
@@ -464,8 +538,11 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
 
                         auto fv_res = field.value();
                         if (fv_res.error()) {
-                            ++idx;
-                            continue;
+                            qprintt << "Root object field value error at index"
+                                    << idx << ":"
+                                    << simdjson::error_message(fv_res.error());
+                            break;  // Stop iteration - ondemand iterator state
+                                    // is corrupted
                         }
                         auto fv = fv_res.value_unsafe();
 
@@ -483,8 +560,11 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                         }
                         auto key_res = field.unescaped_key();
                         if (key_res.error()) {
-                            ++idx;
-                            continue;
+                            qprintt << "Root object field key error at index"
+                                    << idx << ":"
+                                    << simdjson::error_message(key_res.error());
+                            break;  // Stop iteration - ondemand iterator state
+                                    // is corrupted
                         }
                         std::string_view key = key_res.value_unsafe();
                         QString key_str
@@ -542,8 +622,12 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
 
                             auto ev_res = element;
                             if (ev_res.error()) {
-                                ++idx;
-                                continue;
+                                qprintt
+                                    << "Root array element error at index"
+                                    << idx << ":"
+                                    << simdjson::error_message(ev_res.error());
+                                break;  // Stop iteration - ondemand iterator
+                                        // state is corrupted
                             }
                             auto ev = ev_res.value_unsafe();
 

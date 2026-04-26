@@ -277,12 +277,17 @@ bool JsonTreeModel::canFetchMore(const QModelIndex& parent) const
     }
 
     // Only unfetched and not-currently-fetching items can fetch
-    return item->children.isEmpty();
+    return !item->children_loaded && item->children.isEmpty();
 }
 
 void JsonTreeModel::fetchMore(const QModelIndex& parent)
 {
     if (!canFetchMore(parent)) {
+        // Special case: If this is the root and we're already loaded (e.g.
+        // empty {}), we must still signal completion to hide the loading UI.
+        if (getItem(parent) == m_root_item) {
+            emit firstFetchCompleted(0);
+        }
         return;
     }
 
@@ -798,6 +803,9 @@ void JsonTreeModel::onFetchCompleted(
         endRemoveRows();
     }
 
+    // Mark as loaded regardless of child count to prevent infinite fetch loops
+    parent_item->children_loaded = true;
+
     // Insert actual children
     int count = children->size();
     if (count > 0) {
@@ -807,18 +815,14 @@ void JsonTreeModel::onFetchCompleted(
         for (auto* child : *children) {
             child->parent = parent_item;
         }
-        parent_item->children        = *children;
-        parent_item->children_loaded = true;
+        parent_item->children = *children;
 
         // Cache the child count for future paging decisions
-        // This avoids needing to call countChildren() again
         if (parent_item->child_count == 0) {
             parent_item->child_count = count;
         }
 
-        // Model 已经"认领"了这些指针，现在它们由 parent->children 管理
-        // 清空后，当 shared_ptr 析构时，自定义删除器看到的是空容器
-        // 不会误删已经交给 Model 管理的节点
+        // Model takes ownership of these pointers
         children->clear();
 
         endInsertRows();

@@ -583,6 +583,9 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             }
             else {
                 // No children, can show UI immediately
+                if (m_statusbar.path_value) {
+                    m_statusbar.path_value->setText(tr("Ready"));
+                }
                 qprintt << "=== [BG LOAD END] Success (no children) ===";
                 emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
             }
@@ -593,6 +596,10 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
         model, &JsonTreeModel::firstFetchCompleted, this,
         [this](qint64) {
             qprintt << "[BG LOAD] firstFetchCompleted received";
+
+            if (m_statusbar.path_value) {
+                m_statusbar.path_value->setText(tr("Ready"));
+            }
 
             qprintt << "=== [BG LOAD END] Success ===";
             emit sigCommand(ViewCommandType::VCT_StateChange, VCV_Loaded);
