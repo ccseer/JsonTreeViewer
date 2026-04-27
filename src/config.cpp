@@ -7,7 +7,7 @@
 
 #include "seer/viewerhelper.h"
 
-Config& Config::instance()
+Config& Config::ins()
 {
     static Config inst;
     return inst;
@@ -79,6 +79,9 @@ void Config::load()
         = QKeySequence(settings.value("ExportSelection", "Ctrl+E").toString());
     m_shortcutFilter
         = QKeySequence(settings.value("Filter", "Ctrl+F").toString());
+    m_shortcutToggleMode = QKeySequence(
+        settings.value("ToggleMode", QKeySequence(Qt::Key_Tab).toString())
+            .toString());
     settings.endGroup();
 
     if (!fileExists) {
@@ -112,5 +115,6 @@ void Config::save()
     settings.setValue("CopyPath", m_shortcutCopyPath.toString());
     settings.setValue("ExportSelection", m_shortcutExportSelection.toString());
     settings.setValue("Filter", m_shortcutFilter.toString());
+    settings.setValue("ToggleMode", m_shortcutToggleMode.toString());
     settings.endGroup();
 }

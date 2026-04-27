@@ -50,6 +50,7 @@ add_library(jsontreeviewer SHARED
     src/memorymappedfile.cpp
     src/loadworker.cpp
     src/config.cpp
+    src/style_assets.h
     src/common.h
     src/common.cpp
     src/jsonnode.h

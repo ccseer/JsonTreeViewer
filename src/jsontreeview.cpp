@@ -106,9 +106,9 @@ JsonTreeView::JsonTreeView(QWidget* parent) : QTreeView(parent)
     setAnimated(false);
     setContextMenuPolicy(Qt::DefaultContextMenu);
     header()->setStretchLastSection(true);
-    header()->setVisible(Config::instance().showHeader());
-    setExpandsOnDoubleClick(Config::instance().doubleClickExpand());
-    setRootIsDecorated(Config::instance().showBranches());
+    header()->setVisible(Config::ins().showHeader());
+    setExpandsOnDoubleClick(Config::ins().doubleClickExpand());
+    setRootIsDecorated(Config::ins().showBranches());
 
     // Set custom delegate for handling selected item colors
     setItemDelegate(new JsonTreeDelegate(this));
@@ -220,14 +220,14 @@ void JsonTreeView::contextMenuEvent(QContextMenuEvent* event)
 
     // Common Tree Control Actions (shown for both empty space and items)
     QAction* collapseAllAction = menu.addAction(tr("Collapse All"));
-    collapseAllAction->setShortcut(Config::instance().shortcutCollapseAll());
+    collapseAllAction->setShortcut(Config::ins().shortcutCollapseAll());
     connect(collapseAllAction, &QAction::triggered, this,
             &JsonTreeView::collapseAllRequested);
 
     // Only show Expand All for Small files
     if (m_file_mode == FileMode::Small) {
         QAction* expandAllAction = menu.addAction(tr("Expand All"));
-        expandAllAction->setShortcut(Config::instance().shortcutExpandAll());
+        expandAllAction->setShortcut(Config::ins().shortcutExpandAll());
         connect(expandAllAction, &QAction::triggered, this,
                 &JsonTreeView::expandAllRequested);
     }
@@ -252,7 +252,7 @@ void JsonTreeView::drawBranches(QPainter* painter,
     // 1. Call base class first so it can draw arrows/background
     QTreeView::drawBranches(painter, rect, index);
 
-    if (!Config::instance().showBranches()) {
+    if (!Config::ins().showBranches()) {
         return;
     }
 

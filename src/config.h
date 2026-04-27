@@ -5,7 +5,7 @@
 
 class Config {
 public:
-    static Config& instance();
+    static Config& ins();
 
     void load();
     void save();
@@ -77,6 +77,10 @@ public:
     {
         return m_shortcutFilter;
     }
+    QKeySequence shortcutToggleMode() const
+    {
+        return m_shortcutToggleMode;
+    }
 
 private:
     Config();
@@ -104,4 +108,5 @@ private:
     QKeySequence m_shortcutCopyPath        = QKeySequence("Ctrl+Shift+C");
     QKeySequence m_shortcutExportSelection = QKeySequence("Ctrl+E");
     QKeySequence m_shortcutFilter          = QKeySequence("Ctrl+F");
+    QKeySequence m_shortcutToggleMode      = QKeySequence(Qt::Key_Tab);
 };

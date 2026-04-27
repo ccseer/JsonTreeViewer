@@ -232,8 +232,7 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 auto [vt, vp] = typeAndPreviewFromRaw(base_ptr, abs_off, len);
                 // Display index (may start from 1 if configured)
                 int display_idx
-                    = idx
-                      + (Config::instance().arrayIndexStartsAtZero() ? 0 : 1);
+                    = idx + (Config::ins().arrayIndexStartsAtZero() ? 0 : 1);
                 QString idx_str = QString::number(display_idx);
                 // JSON Pointer always uses actual index (0-based)
                 auto* item = new JsonTreeItem(
@@ -665,7 +664,7 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                             // Display index (may start from 1 if configured)
                             int display_idx
                                 = idx
-                                  + (Config::instance().arrayIndexStartsAtZero()
+                                  + (Config::ins().arrayIndexStartsAtZero()
                                          ? 0
                                          : 1);
                             QString idx_str = QString::number(display_idx);

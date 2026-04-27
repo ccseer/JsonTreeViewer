@@ -11,7 +11,10 @@
 
 #include "../common.h"
 #include "../jsontreemodel.h"
+#include "../style_assets.h"
 #include "searchresultdelegate.h"
+
+using namespace jtv::ui;
 
 SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
 {
@@ -28,26 +31,14 @@ SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
     m_banner = new QWidget(this);
     m_banner->setObjectName("searchBanner");
     m_banner->setFixedHeight(32);
-    m_banner->setStyleSheet(R"(
-        QWidget#searchBanner { 
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1A237E, stop:1 #121858);
-            border-bottom: 1px solid #303F9F; 
-        }
-        QLabel { color: #E8EAF6; font-weight: bold; }
-        QProgressBar { 
-            border: none; background: #283593; height: 4px; border-radius: 2px;
-        }
-        QProgressBar::chunk { background-color: #448AFF; border-radius: 2px; }
-        QPushButton { color: #C5CAE9; font-size: 16px; font-weight: bold; border: none; background: transparent; }
-        QPushButton:hover { color: #FFFFFF; }
-    )");
+    m_banner->setStyleSheet(g_qss_search_banner);
 
     auto* bannerLay = new QHBoxLayout(m_banner);
     bannerLay->setContentsMargins(12, 0, 8, 0);
     bannerLay->setSpacing(10);
 
     m_label_query = new QLabel(this);
-    m_label_query->setStyleSheet("font-size: 12px;");
+    m_label_query->setStyleSheet(g_qss_label_query);
     bannerLay->addWidget(m_label_query, 1);
 
     m_progress = new QProgressBar(this);
@@ -59,7 +50,7 @@ SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
     bannerLay->addWidget(m_progress);
 
     m_label_count = new QLabel(this);
-    m_label_count->setStyleSheet("font-size: 11px; color: #C5CAE9;");
+    m_label_count->setStyleSheet(g_qss_label_count);
     bannerLay->addWidget(m_label_count);
 
     m_btn_cancel = new QPushButton("×", this);
@@ -73,8 +64,7 @@ SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
     // List UI
     m_view = new QListView(this);
     m_view->setFrameShape(QFrame::NoFrame);
-    m_view->setStyleSheet(
-        "QListView { background-color: #121212; border: none; }");
+    m_view->setStyleSheet(g_qss_search_list);
     m_view->setModel(m_results_model);
     m_view->setItemDelegate(new SearchResultDelegate(this));
     m_view->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -231,4 +221,31 @@ void SearchPanel::updateDPR(qreal r)
     f2.setPixelSize(11 * r);
     m_label_query->setFont(f1);
     m_label_count->setFont(f2);
+}
+void SearchPanel::updateTheme(bool isDark)
+{
+    using namespace jtv::ui::Colors;
+
+    // 1. Banner style
+    m_banner->setStyleSheet(
+        QString(g_qss_search_banner)
+            .arg(isDark ? "#1A237E" : "#E8EAF6")  // stop0
+            .arg(isDark ? "#121858" : "#C5CAE9")  // stop1
+            .arg(isDark ? DarkBorder : LightBorder)
+            .arg(isDark ? DarkText : LightText)
+            .arg(isDark ? "#283593" : "#BDBDBD")  // progressBG
+            .arg(Accent)                          // progressChunk
+            .arg(isDark ? "#C5CAE9" : "#3F51B5")  // btnText
+            .arg(isDark ? "#FFFFFF" : "#1A237E")  // btnHover
+    );
+
+    // 2. Labels
+    m_label_query->setStyleSheet(
+        QString(g_qss_label_query).arg(isDark ? DarkText : LightText));
+    m_label_count->setStyleSheet(
+        QString(g_qss_label_count).arg(isDark ? DarkTextDim : LightTextDim));
+
+    // 3. View style
+    m_view->setStyleSheet(
+        QString(g_qss_search_list).arg(isDark ? DarkBG : LightBG));
 }

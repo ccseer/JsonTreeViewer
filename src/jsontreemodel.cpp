@@ -20,50 +20,16 @@
 #include "jsonnode.h"
 #include "loadworker.h"
 #include "strategies/jsonstrategy.h"
+#include "style_assets.h"
 
 using namespace simdjson;
+using namespace jtv::ui;
 
 #define qprintt qprint << "[Model]"
 
 namespace {
-constexpr auto g_type_obj = "Object";
-constexpr auto g_type_arr = "Array";
-// constexpr auto g_type_str  = "String";
-// constexpr auto g_type_num  = "Number";
-// constexpr auto g_type_bool = "Boolean";
 
 enum ColumnIndex : uchar { CI_Key = 0, CI_Value = 1, CI_Count };
-
-// Material Symbol: "Curly Brackets" - Stroke version for better visibility
-constexpr auto g_svg_object = R"SVG(
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M10 4H9a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1m4-18h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg>)SVG";
-
-// Material Symbol: "Square Brackets" - Stroke version for better visibility
-constexpr auto g_svg_array = R"SVG(
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M8 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h1m8-14h1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/></svg>)SVG";
-
-// Helper to create icons from SVG data with stroke support
-QIcon svgIcon(const char* svg_data, const QColor& color, int icon_sz, qreal dpr)
-{
-    QByteArray data(svg_data);
-    // Replace both fill and stroke currentColor
-    QByteArray colorName = color.name(QColor::HexRgb).toUtf8();
-    data.replace("currentColor", colorName);
-
-    QSvgRenderer renderer(data);
-    if (!renderer.isValid()) {
-        return {};
-    }
-
-    const int phys = qRound(icon_sz * dpr);
-    QPixmap pix(phys, phys);
-    pix.setDevicePixelRatio(dpr);
-    pix.fill(Qt::transparent);
-    QPainter p(&pix);
-    p.setRenderHint(QPainter::Antialiasing);
-    renderer.render(&p, QRectF(0, 0, icon_sz, icon_sz));
-    return QIcon(pix);
-}
 
 // Color detection helper
 QColor parseColorValue(const QString& value)
@@ -349,7 +315,7 @@ QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
                 return m_arrIcon;
         }
         else if (index.column() == CI_Value && item->type == 's'
-                 && Config::instance().showColorPreview()) {
+                 && Config::ins().showColorPreview()) {
             // Color preview for string values that look like colors
             QColor color = parseColorValue(item->value);
             if (color.isValid()) {
@@ -842,7 +808,7 @@ QString JsonTreeModel::getSubtree(const QModelIndex& idx,
         return QString::fromUtf8(jsonData);
     }
 
-    const auto& cfg = Config::instance();
+    const auto& cfg = Config::ins();
     if (cfg.exportFormat() == "compact") {
         return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
     }

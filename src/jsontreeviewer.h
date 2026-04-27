@@ -36,6 +36,7 @@ private:
     void onTextViewBtnClicked();
 
     void initTopWnd();
+    void initBtmWnd();
     void startBackgroundLoad(JsonTreeModel* model, const QString& path);
     void updateStatusBarStats(JsonTreeModel* model);
     QString formatFileSize(qint64 bytes) const;
@@ -58,12 +59,12 @@ private:
         QLabel* info = nullptr;  // Right: info icon with tooltip
     } m_btm;
 
-    JsonTreeView* m_view;
-    JsonTreeModel* m_model;
-    QProgressBar* m_progress_bar;
+    JsonTreeView* m_view         = nullptr;
+    JsonTreeModel* m_model       = nullptr;
+    QProgressBar* m_progress_bar = nullptr;
 
     // control bar btn
-    QPushButton* m_btn_text_view;
+    QPushButton* m_btn_text_view = nullptr;
 
     // Search & Navigation
     SearchPanel* m_search_panel = nullptr;

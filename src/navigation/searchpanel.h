@@ -28,6 +28,7 @@ public:
                      std::shared_ptr<JsonViewerStrategy> strategy,
                      const SearchQuery& query);
     void cancelSearch();
+    void updateTheme(bool isDark);
     void clear();
     void updateDPR(qreal r);
 
