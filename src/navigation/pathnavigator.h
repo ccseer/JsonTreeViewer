@@ -22,6 +22,7 @@ public:
     explicit PathNavigator(QObject* parent = nullptr);
 
     void navigate(JsonTreeModel* model, const QString& jsonPointer);
+    void cancel();
 
     const QModelIndex& currentIndex() const
     {
@@ -44,6 +45,7 @@ private:
 
     QPointer<JsonTreeModel> m_model;
     QStringList m_pathSegments;
+    QString m_fullPath;
     int m_currentDepth = 0;
     QModelIndex m_currentIndex;
     bool m_waitingForFetch = false;

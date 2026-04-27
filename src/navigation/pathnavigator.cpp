@@ -34,7 +34,13 @@ void PathNavigator::navigate(JsonTreeModel* model, const QString& jsonPointer)
     if (normalized.startsWith("/"))
         normalized.remove(0, 1);
 
-    m_pathSegments    = normalized.split('/', Qt::SkipEmptyParts);
+    m_fullPath     = jsonPointer;
+    m_pathSegments = normalized.split('/', Qt::SkipEmptyParts);
+    // Pre-unescape all segments
+    for (QString& s : m_pathSegments) {
+        s = JsonPointer::unescape(s);
+    }
+
     m_currentDepth    = 0;
     m_currentIndex    = QModelIndex();  // Start at root
     m_waitingForFetch = false;
@@ -45,6 +51,16 @@ void PathNavigator::navigate(JsonTreeModel* model, const QString& jsonPointer)
             &PathNavigator::onFetchQueueChanged);
 
     navigateNextLevel();
+}
+
+void PathNavigator::cancel()
+{
+    m_timeoutTimer->stop();
+    m_waitingForFetch = false;
+    m_pathSegments.clear();
+    m_currentDepth = 0;
+    disconnect(m_model, &JsonTreeModel::fetchQueueChanged, this,
+               &PathNavigator::onFetchQueueChanged);
 }
 
 void PathNavigator::navigateNextLevel()
@@ -63,7 +79,7 @@ void PathNavigator::navigateNextLevel()
         return;
     }
 
-    QString segment = unescapeSegment(m_pathSegments[m_currentDepth]);
+    QString segment = m_pathSegments[m_currentDepth];
 
     // Check if children are already loaded.
     // Use children_loaded instead of isEmpty() to handle placeholders
@@ -99,8 +115,11 @@ void PathNavigator::navigateNextLevel()
     }
     else {
         m_timeoutTimer->stop();
-        emit navigationCompleted(NavigationError::PathNotFound,
-                                 tr("Path segment not found: %1").arg(segment));
+        emit navigationCompleted(
+            NavigationError::PathNotFound,
+            tr("Path segment not found: %1 (in %2)")
+                .arg(segment)
+                .arg(m_fullPath.isEmpty() ? "/" : m_fullPath));
     }
 }
 
@@ -170,13 +189,35 @@ JsonTreeItem* PathNavigator::findChild(JsonTreeItem* parentItem,
 JsonTreeItem* PathNavigator::findInPagedArray(JsonTreeItem* arrayNode,
                                               int targetIndex)
 {
-    for (int i = 0; i < arrayNode->children.size(); ++i) {
-        JsonTreeItem* child = arrayNode->children[i];
+    if (arrayNode->children.isEmpty())
+        return nullptr;
+
+    int left  = 0;
+    int right = arrayNode->children.size() - 1;
+
+    while (left <= right) {
+        int mid             = left + (right - left) / 2;
+        JsonTreeItem* child = arrayNode->children[mid];
         if (child->is_virtual_page) {
             if (targetIndex >= child->page_start
                 && targetIndex <= child->page_end) {
                 return child;
             }
+            if (targetIndex < child->page_start) {
+                right = mid - 1;
+            }
+            else {
+                left = mid + 1;
+            }
+        }
+        else {
+            // Should not happen if paged, but handle for safety
+            if (mid == targetIndex)
+                return child;
+            if (targetIndex < mid)
+                right = mid - 1;
+            else
+                left = mid + 1;
         }
     }
     return nullptr;
@@ -184,8 +225,5 @@ JsonTreeItem* PathNavigator::findInPagedArray(JsonTreeItem* arrayNode,
 
 QString PathNavigator::unescapeSegment(const QString& segment)
 {
-    QString res = segment;
-    res.replace("~1", "/");
-    res.replace("~0", "~");
-    return res;
+    return JsonPointer::unescape(segment);
 }

@@ -273,6 +273,14 @@ QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
             textColor.setAlpha(180);  // ~70% opacity (180/255)
             return textColor;
         }
+
+        if (item->is_virtual_page) {
+            // Virtual page - use secondary text color (dimmed)
+            QColor textColor = qApp->palette().color(QPalette::Text);
+            textColor.setAlpha(180);  // ~70% opacity (180/255)
+            return textColor;
+        }
+
         return {};  // Use default text color for object keys
     }
 
@@ -310,6 +318,12 @@ QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
         default:
             return {};
         }
+    }
+
+    if (role == Qt::FontRole && item->is_virtual_page) {
+        QFont font;
+        font.setItalic(true);
+        return font;
     }
 
     // Node icons for keys (column 0) and color preview for values (column 1)
@@ -934,6 +948,8 @@ void JsonTreeModel::processFetchQueue()
     connect(thread, &QThread::started, worker, &FetchWorker::doFetch);
     connect(worker, &FetchWorker::fetchCompleted, this,
             &JsonTreeModel::onFetchCompleted);
+    connect(worker, &FetchWorker::fetchFailed, this,
+            &JsonTreeModel::onFetchFailed);
     connect(worker, &FetchWorker::progressUpdated, this,
             &JsonTreeModel::onFetchProgress);
     worker->moveToThread(thread);
@@ -1037,6 +1053,19 @@ void JsonTreeModel::onFetchCompleted(
     // Cleanup current fetch
     cleanupFetchState();
     // Process next item in queue
+    processFetchQueue();
+}
+
+void JsonTreeModel::onFetchFailed(JsonTreeItem* parent_item)
+{
+    qprintt << "[FETCH ASYNC] Failed or interrupted:"
+            << (parent_item ? parent_item->key : "unknown");
+
+    if (parent_item) {
+        m_fetching_items.remove(parent_item);
+    }
+
+    cleanupFetchState();
     processFetchQueue();
 }
 

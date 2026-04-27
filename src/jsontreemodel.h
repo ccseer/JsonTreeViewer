@@ -97,6 +97,7 @@ private slots:
                           JsonTreeItem* parent_item,
                           const QModelIndex& parent_index,
                           qint64 elapsedMs);
+    void onFetchFailed(JsonTreeItem* parent_item);
 
     void onFetchProgress(int dotCount, int unused);
 

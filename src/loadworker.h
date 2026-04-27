@@ -129,6 +129,12 @@ signals:
      */
     void progressUpdated(int dotCount, int unused);
 
+    /**
+     * @brief Emitted if extraction fails or is interrupted
+     * @param parent_item The parent item pointer (for verification)
+     */
+    void fetchFailed(JsonTreeItem* parent_item);
+
 private:
     // Paging helper methods
     int getPageSize() const;

@@ -40,9 +40,13 @@ QPair<char, QString> typeAndPreviewFromRaw(const char* data_ptr,
             if (data_ptr[offset + i] == '"') {
                 // Count consecutive backslashes before this quote
                 size_t backslash_count = 0;
-                for (size_t j = i - 1; j > 0 && data_ptr[offset + j] == '\\';
-                     --j) {
-                    backslash_count++;
+                for (size_t j = i; j > 0; --j) {
+                    if (data_ptr[offset + j - 1] == '\\') {
+                        backslash_count++;
+                    }
+                    else {
+                        break;
+                    }
                 }
                 // If backslash count is even (including 0), this quote is not
                 // escaped
@@ -61,7 +65,12 @@ QPair<char, QString> typeAndPreviewFromRaw(const char* data_ptr,
         // Enhanced preview: show truncated content with character count for
         // long strings
         if (content_len > 80) {
-            QString preview = QString::fromUtf8(data_ptr + offset + 1, 80);
+            // Take enough bytes to get at least 80 characters (max 4 bytes per
+            // char)
+            size_t bytes_to_take = std::min<size_t>(content_len, 320);
+            QString preview      = QString::fromUtf8(data_ptr + offset + 1,
+                                                     static_cast<int>(bytes_to_take))
+                                  .left(80);
             preview.replace("\n", " ");
             return {
                 's',
@@ -164,8 +173,7 @@ QVector<JsonTreeItem*> iterateValue(simdjson::ondemand::value& container,
                 }
                 std::string_view key = key_res.value_unsafe();
                 QString key_str = QString::fromUtf8(key.data(), key.size());
-                QString esc_key = key_str;
-                esc_key.replace("~", "~0").replace("/", "~1");
+                QString esc_key = JsonPointer::escape(key_str);
 
                 auto* item = new JsonTreeItem(
                     key_str, parent_pointer + "/" + esc_key, vt, vp,
@@ -310,39 +318,14 @@ JsonViewerStrategy::CountResult JsonViewerStrategy::countLocalBufferChildren(
         QString error
             = QString::fromUtf8(simdjson::error_message(iter_result.error()));
 
-        // Use ondemand to find the exact error location
-        simdjson::ondemand::parser loc_parser;
-        auto loc_res
-            = loc_parser.iterate(base_ptr, base_size, base_size + padding);
         quint64 offset = 0;
-
-        if (!loc_res.error()) {
-            auto& doc = loc_res.value_unsafe();
-            // Try to get the initial value to trigger the error and find its
-            // location
-            auto val_res = doc.get_value();
-            if (val_res.error()) {
-                auto pos_res = doc.current_location();
-                if (!pos_res.error()) {
-                    const char* pos = pos_res.value_unsafe();
-                    if (pos >= base_ptr && pos <= base_ptr + base_size) {
-                        offset = static_cast<quint64>(pos - base_ptr);
-                    }
-                }
+        auto pos_res   = iter_result.current_location();
+        if (!pos_res.error()) {
+            const char* pos = pos_res.value_unsafe();
+            if (pos >= base_ptr && pos <= base_ptr + base_size) {
+                offset = static_cast<quint64>(pos - base_ptr);
             }
         }
-        else {
-            // If iteration failed immediately, try to get location from the
-            // result
-            auto pos_res = loc_res.current_location();
-            if (!pos_res.error()) {
-                const char* pos = pos_res.value_unsafe();
-                if (pos >= base_ptr && pos <= base_ptr + base_size) {
-                    offset = static_cast<quint64>(pos - base_ptr);
-                }
-            }
-        }
-
         qprintt << "JSON parse error:" << error << "at exact offset:" << offset;
         return {0, error, offset};
     }
@@ -585,8 +568,7 @@ QVector<JsonTreeItem*> JsonViewerStrategy::parseLocalBuffer(
                         std::string_view key = key_res.value_unsafe();
                         QString key_str
                             = QString::fromUtf8(key.data(), key.size());
-                        QString esc_key = key_str;
-                        esc_key.replace("~", "~0").replace("/", "~1");
+                        QString esc_key = JsonPointer::escape(key_str);
                         auto [vt, vp]
                             = typeAndPreviewFromRaw(base_ptr, abs_off, len);
                         auto* item = new JsonTreeItem(key_str, "/" + esc_key,

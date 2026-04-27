@@ -38,3 +38,31 @@ public:
         // qprint << "~" << this;
     }
 };
+
+namespace JsonPointer {
+/**
+ * @brief Escapes a segment for use in a JSON Pointer (RFC 6901)
+ * ~ -> ~0
+ * / -> ~1
+ */
+inline QString escape(const QString& segment)
+{
+    QString res = segment;
+    res.replace("~", "~0");
+    res.replace("/", "~1");
+    return res;
+}
+
+/**
+ * @brief Unescapes a segment from a JSON Pointer (RFC 6901)
+ * ~1 -> /
+ * ~0 -> ~
+ */
+inline QString unescape(const QString& segment)
+{
+    QString res = segment;
+    res.replace("~1", "/");
+    res.replace("~0", "~");
+    return res;
+}
+}  // namespace JsonPointer

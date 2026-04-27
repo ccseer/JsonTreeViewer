@@ -191,6 +191,11 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
         if (matches(currentKey)) {
             m_batch.append({currentKey, valueSnippet, currentPath, typeChar});
             m_totalResults++;
+            if (m_totalResults >= MAX_RESULTS) {
+                emitBatch(true);
+                emit limitReached(MAX_RESULTS);
+                return;
+            }
             emitBatch();
         }
     }
@@ -201,6 +206,11 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
         if (matches(valueSnippet)) {
             m_batch.append({currentKey, valueSnippet, currentPath, typeChar});
             m_totalResults++;
+            if (m_totalResults >= MAX_RESULTS) {
+                emitBatch(true);
+                emit limitReached(MAX_RESULTS);
+                return;
+            }
             emitBatch();
         }
     }
@@ -208,6 +218,11 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
     if (m_query.type == SearchType::Path && matches(currentPath)) {
         m_batch.append({currentKey, valueSnippet, currentPath, typeChar});
         m_totalResults++;
+        if (m_totalResults >= MAX_RESULTS) {
+            emitBatch(true);
+            emit limitReached(MAX_RESULTS);
+            return;
+        }
         emitBatch();
     }
 
@@ -226,9 +241,8 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
                 if (field.unescaped_key().get(key_view) == simdjson::SUCCESS) {
                     QString key
                         = QString::fromUtf8(key_view.data(), key_view.size());
-                    QString escapedKey = key;
-                    escapedKey.replace("~", "~0").replace("/", "~1");
-                    QString nextPath = currentPath + "/" + escapedKey;
+                    QString escapedKey = JsonPointer::escape(key);
+                    QString nextPath   = currentPath + "/" + escapedKey;
                     simdjson::ondemand::value nextVal;
                     if (field.value().get(nextVal) == simdjson::SUCCESS)
                         searchRecursive(nextVal, nextPath, key, basePtr);
@@ -274,7 +288,8 @@ void SearchWorker::emitBatch(bool force)
 {
     if (m_batch.isEmpty())
         return;
-    if (force || m_batch.size() >= 50 || m_batchTimer.elapsed() >= 100) {
+    if (force || m_batch.size() >= BATCH_SIZE
+        || m_batchTimer.elapsed() >= BATCH_INTERVAL_MS) {
         emit resultsFound(m_batch);
         m_batch.clear();
         m_batchTimer.restart();

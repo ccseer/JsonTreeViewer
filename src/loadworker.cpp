@@ -174,6 +174,7 @@ void FetchWorker::doFetch()
     // 1. Check for interruption before starting
     if (QThread::currentThread()->isInterruptionRequested()) {
         qprintt << "[FETCH ASYNC] Interrupted before start";
+        emit fetchFailed(m_parent_item);
         return;
     }
 
@@ -241,6 +242,7 @@ void FetchWorker::doFetch()
         qprintt << "[FETCH ASYNC] Interrupted after extraction, cleaning up"
                 << children->size() << "items";
         // Custom deleter will automatically clean up
+        emit fetchFailed(m_parent_item);
         return;
     }
 
