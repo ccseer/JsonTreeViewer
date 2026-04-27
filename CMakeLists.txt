@@ -51,6 +51,7 @@ add_library(jsontreeviewer SHARED
     src/loadworker.cpp
     src/config.cpp
     src/common.h
+    src/common.cpp
     src/jsonnode.h
     src/jsontreemodel.h
     src/jsontreeview.h
@@ -69,6 +70,14 @@ add_library(jsontreeviewer SHARED
     src/strategies/largefilestrategy.cpp
     src/strategies/extremefilestrategy.h
     src/strategies/extremefilestrategy.cpp
+    src/navigation/pathnavigator.h
+    src/navigation/pathnavigator.cpp
+    src/navigation/searchworker.h
+    src/navigation/searchworker.cpp
+    src/navigation/searchpanel.h
+    src/navigation/searchpanel.cpp
+    src/navigation/searchresultdelegate.h
+    src/navigation/searchresultdelegate.cpp
     ${seersdk_SOURCE_DIR}/seer/viewerbase.h
 )
 

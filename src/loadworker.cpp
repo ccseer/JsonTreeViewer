@@ -98,12 +98,15 @@ void LoadWorker::doLoad()
         return;
     }
 
-    root->pointer     = root_pointer;  // Should be empty string
+    root->pointer     = root_pointer;
     root->byte_offset = byte_offset;
     root->byte_length = byte_length;
     root->child_count = child_count;
-    root->has_children
-        = true;  // Objects/arrays always have children flag, even if empty
+
+    // Determine type from strategy (important for navigation)
+    root->type = strategy->isRootArray() ? '[' : '{';
+
+    root->has_children = true;
     root->children_loaded
         = (child_count == 0);  // Empty containers are already "loaded"
     qprintt << "[BG LOAD] Root metadata: pointer=" << root_pointer

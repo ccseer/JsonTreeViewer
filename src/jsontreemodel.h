@@ -45,6 +45,11 @@ public:
         return m_strategy ? m_strategy->supportedActions() : CopyActions{};
     }
 
+    std::shared_ptr<JsonViewerStrategy> strategy() const
+    {
+        return m_strategy;
+    }
+
     Qt::ItemFlags flags(const QModelIndex& index) const override;
     QVariant data(const QModelIndex& index, int role) const override;
     QVariant headerData(int section,

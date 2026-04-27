@@ -2,7 +2,6 @@
 
 #include <QModelIndex>
 #include <QObject>
-#include <QThread>
 #include <QVector>
 #include <memory>
 
@@ -10,31 +9,6 @@
 
 class JsonTreeItem;
 class JsonViewerStrategy;
-
-/**
- * @brief Custom QThread that automatically cleans up in destructor
- *
- * This class ensures that quit() and wait() are called in the destructor.
- * The thread will finish cleanly without blocking indefinitely.
- *
- * IMPORTANT: Always use deleteLater() instead of direct delete to ensure
- * proper cleanup through Qt's event loop.
- */
-class JTVThread : public QThread {
-    Q_OBJECT
-
-    // Hide run() to prevent direct override - use worker pattern instead
-    using QThread::run;
-
-public:
-    explicit JTVThread(QObject* parent = nullptr) : QThread(parent) {}
-
-    ~JTVThread() override
-    {
-        quit();
-        wait();
-    }
-};
 
 /**
  * @brief Worker object for background JSON file loading

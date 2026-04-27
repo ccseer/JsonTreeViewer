@@ -11,6 +11,9 @@ from pathlib import Path
 # Default build directory for quick execution
 DEFAULT_BUILD_DIR = r"C:\Users\corey\Dev\build_output\JsonTreeViewer"
 
+# Qt bin directory for DLLs
+QT_BIN_DIR = r"C:\Users\corey\Dev\Qt\6.8.3\msvc2022_64\bin"
+
 # The executables and their corresponding log files.
 # If relative, they are relative to the 'tests' directory in the build output.
 TESTS_CONFIG = [
@@ -20,6 +23,8 @@ TESTS_CONFIG = [
     {"exe": "test_async_loading.exe", "log": "test_async_loading.log"},
     {"exe": "test_string_parsing.exe", "log": "test_string_parsing.log"},
     {"exe": "test_errors.exe", "log": "test_errors.log"},
+    {"exe": "test_navigation.exe", "log": "test_navigation.log"},
+    {"exe": "test_search.exe", "log": "test_search.log"},
 ]
 # --- End Configuration ---
 
@@ -32,9 +37,20 @@ def run_test(exe_path, log_path, args=None, cwd=None):
 
     print(f"Starting {exe_path.name} -> {log_path.name}")
 
+    import os
+
+    env = os.environ.copy()
+    if QT_BIN_DIR:
+        env["PATH"] = QT_BIN_DIR + os.pathsep + env.get("PATH", "")
+
     try:
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=cwd
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=cwd,
+            env=env,
         )
 
         status_msg = (

@@ -52,6 +52,15 @@ public:
     virtual FileMode type() const = 0;
 
     /**
+     * @brief Check if the root element is an array
+     * @return true if root is an array, false if object
+     */
+    virtual bool isRootArray() const
+    {
+        return m_is_array;
+    }
+
+    /**
      * @brief Initialize the strategy by loading the file
      * @param path Path to the JSON file
      * @return true on success, false on failure
@@ -103,6 +112,7 @@ public:
         quint32 count = 0;
         QString error;
         quint64 offset = 0;
+        bool is_array  = false;
     };
 
     virtual const Metrics& metrics() const = 0;
@@ -156,6 +166,8 @@ public:
     }
 
 protected:
+    bool m_is_array = false;
+
     // Helper for strategies to count children in a local buffer
     static CountResult countLocalBufferChildren(const char* base_ptr,
                                                 size_t base_size);

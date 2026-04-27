@@ -10,11 +10,9 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
-#include <QMouseEvent>
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QShortcut>
 #include <QStandardPaths>
 #include <QSvgRenderer>
 #include <QTimer>
@@ -25,6 +23,10 @@
 #include "jsontreemodel.h"
 #include "jsontreeview.h"
 #include "loadworker.h"
+#include "navigation/pathnavigator.h"
+#include "navigation/searchpanel.h"
+#include "navigation/searchresultdelegate.h"
+#include "navigation/searchworker.h"
 #include "seer/viewerhelper.h"
 
 #define qprintt qDebug() << "[JsonTreeViewer]"
@@ -37,6 +39,18 @@ constexpr auto g_ctrlbar_btn_icon_sz = 24;
 constexpr auto g_svg_search = R"SVG(
 <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
   <path fill="currentColor" d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/>
+</svg>)SVG";
+
+// Material Symbol: "Filter List"
+constexpr auto g_svg_filter = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="M440-160v-320L160-760v-80h640v80L520-480v320h-80Z"/>
+</svg>)SVG";
+
+// Material Symbol: "Public" (Globe)
+constexpr auto g_svg_globe = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-40-82v-78q-33 0-56.5-23.5T360-320v-40L168-552q-3 18-5.5 36t-2.5 36q0 121 76.5 212T440-162Zm282-158q30-33 49-73t19-87q0-72-32.5-132.5T774-710L640-576v136h-80v-160L416-744v-56q16-2 32-3t32-1q120 0 219 73t137 185l-101-101q-5 10-12.5 18.5T706-613L560-467v75l162 162Z"/>
 </svg>)SVG";
 
 // Material Symbol: "Article" Rounded, Outline, Weight 300
@@ -55,6 +69,12 @@ constexpr auto g_svg_info = R"SVG(
 constexpr auto g_svg_chevron_right = R"SVG(
 <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
   <path fill="currentColor" d="m376-300-44-44 136-136-136-136 44-44 180 180-180 180Z"/>
+</svg>)SVG";
+
+// Material Symbol: "Close"
+constexpr auto g_svg_close = R"SVG(
+<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24">
+  <path fill="currentColor" d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>
 </svg>)SVG";
 
 QIcon svgIcon(const char* svg_data, const QColor& color, int icon_sz, qreal dpr)
@@ -86,24 +106,82 @@ JsonTreeViewer::JsonTreeViewer(QWidget* parent)
 JsonTreeViewer::~JsonTreeViewer()
 {
     qprintt << "~" << this;
+    cancelSearch();
 }
 
 void JsonTreeViewer::initTopWnd()
 {
-    m_top.wnd_bg           = new QWidget(this);
-    QHBoxLayout* layout_bg = new QHBoxLayout;
-    m_top.wnd_bg->setLayout(layout_bg);
-    m_top.filter = new QLineEdit(this);
-    layout_bg->addWidget(m_top.filter);
+    m_top.wnd_bg = new QWidget(this);
+    m_top.wnd_bg->setObjectName("topBar");
+    m_top.wnd_bg->setStyleSheet(R"(
+        QWidget#topBar { background-color: #1E1E1E; border-bottom: 1px solid #333333; }
+        QLineEdit { 
+            background-color: #121212; border: 1px solid #444444; border-radius: 4px; 
+            color: #E0E0E0; padding: 4px 10px; selection-background-color: #0288D1; 
+        }
+        QLineEdit:focus { border: 1px solid #0288D1; }
+        QComboBox { 
+            background-color: transparent; border: none; color: #888888; font-size: 11px; 
+        }
+    )");
 
-    m_top.filter->setPlaceholderText("Filter...");
-    m_top.filter->setClearButtonEnabled(true);
+    QHBoxLayout* layout = new QHBoxLayout(m_top.wnd_bg);
+    layout->setContentsMargins(12, 6, 12, 6);
+    layout->setSpacing(10);
 
-    // Add search icon
-    auto dpr         = options()->dpr();
-    QColor iconColor = qApp->palette().color(QPalette::PlaceholderText);
-    QIcon searchIcon = svgIcon(g_svg_search, iconColor, 16, dpr);
-    m_top.filter->addAction(searchIcon, QLineEdit::LeadingPosition);
+    m_top.input = new QLineEdit(this);
+    m_top.input->setPlaceholderText(tr("Filter current view..."));
+    m_top.input->setClearButtonEnabled(true);
+    layout->addWidget(m_top.input, 1);
+
+    // Global Search Toggle Icon
+    auto dpr           = options()->dpr();
+    QColor iconColor   = qApp->palette().color(QPalette::PlaceholderText);
+    QColor activeColor = QColor("#0288D1");
+
+    m_top.action_global
+        = new QAction(svgIcon(g_svg_filter, iconColor, 16, dpr), "", this);
+    m_top.action_global->setCheckable(true);
+    m_top.action_global->setToolTip(tr("Deep Search Mode (Tab to Toggle)"));
+    m_top.input->addAction(m_top.action_global, QLineEdit::TrailingPosition);
+
+    connect(m_top.action_global, &QAction::toggled, this,
+            [this, activeColor, iconColor, dpr](bool checked) {
+                m_top.action_global->setIcon(
+                    svgIcon(checked ? g_svg_globe : g_svg_filter,
+                            checked ? activeColor : iconColor, 16, dpr));
+                m_top.input->setPlaceholderText(
+                    checked ? tr("Deep search entire file (Enter)...")
+                            : tr("Filter current view..."));
+
+                // Reset state on toggle
+                m_top.input->clear();
+                if (checked) {
+                    // Mode: Filter -> Search
+                    if (m_search_panel)
+                        m_search_panel->hide();
+                    // Force reset filter to show all items
+                    auto* proxy
+                        = qobject_cast<TreeFilterProxyModel*>(m_view->model());
+                    if (proxy)
+                        proxy->updateFilter("");
+                }
+                else {
+                    // Mode: Search -> Filter
+                    cancelSearch();
+                    if (m_search_panel) {
+                        m_search_panel->clear();
+                        m_search_panel->hide();
+                    }
+                }
+                m_top.input->setFocus();
+            });
+
+    connect(m_top.input, &QLineEdit::returnPressed, this, [this]() {
+        if (m_top.action_global->isChecked()) {
+            startSearch();
+        }
+    });
 }
 
 QSize JsonTreeViewer::getContentSize() const
@@ -132,8 +210,11 @@ void JsonTreeViewer::updateDPR(qreal r)
         auto ma = 9 * r;
         m_top.wnd_bg->layout()->setContentsMargins(ma, 0, ma, 0);
         m_top.wnd_bg->layout()->setSpacing(0);
-        m_top.filter->setFont(font);
-        m_top.filter->setFixedHeight(height_top);
+        m_top.input->setFont(font);
+        m_top.input->setFixedHeight(height_top);
+    }
+    if (m_search_panel) {
+        m_search_panel->updateDPR(r);
     }
     m_view->upadteDPR(r);
 
@@ -192,10 +273,14 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     proxy_model->setSourceModel(m_model);
     QTimer* timer = new QTimer(this);
     timer->setSingleShot(true);
-    connect(m_top.filter, &QLineEdit::textChanged, this,
-            [timer](const QString&) { timer->start(300); });
+    connect(m_top.input, &QLineEdit::textChanged, this,
+            [timer, this](const QString&) {
+                if (!m_top.action_global->isChecked()) {
+                    timer->start(300);
+                }
+            });
     connect(timer, &QTimer::timeout, proxy_model, [proxy_model, this] {
-        proxy_model->updateFilter(m_top.filter->text());
+        proxy_model->updateFilter(m_top.input->text());
     });
 
     m_view = new JsonTreeView(this);
@@ -203,6 +288,43 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     // Default to Small, will be updated after load
     m_view->setFileMode(FileMode::Small);
     m_view->setModel(proxy_model);
+
+    lay_content->addWidget(m_view);
+
+    m_search_panel = new SearchPanel(this);
+    m_search_panel->hide();
+
+    lay_content->addWidget(m_search_panel);
+
+    connect(m_search_panel, &SearchPanel::targetResolved, this,
+            [this](const QModelIndex& index) {
+                if (!index.isValid()) {
+                    return;
+                }
+                auto* proxy
+                    = qobject_cast<QSortFilterProxyModel*>(m_view->model());
+                QModelIndex proxyIndex = index;
+                if (proxy)
+                    proxyIndex = proxy->mapFromSource(index);
+
+                if (proxyIndex.isValid()) {
+                    m_view->setCurrentIndex(proxyIndex);
+                    m_view->scrollTo(proxyIndex,
+                                     QAbstractItemView::PositionAtCenter);
+                    m_view->selectionModel()->select(
+                        proxyIndex, QItemSelectionModel::ClearAndSelect
+                                        | QItemSelectionModel::Rows);
+                }
+            });
+
+    connect(m_search_panel, &SearchPanel::navigationFailed, this,
+            [this](const QString& msg) {
+                emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
+                                tr("Navigation Failed: %1").arg(msg));
+            });
+
+    connect(m_search_panel, &SearchPanel::cancelRequested, this,
+            &JsonTreeViewer::cancelSearch);
 
     // Subtle progress bar
     m_progress_bar = new QProgressBar(this);
@@ -214,7 +336,6 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
         "QProgressBar::chunk { background-color: #2196F3; }");
     m_progress_bar->hide();
 
-    lay_content->addWidget(m_view);
     lay_content->addWidget(m_progress_bar);
 
     // Status bar with three sections
@@ -241,9 +362,12 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     m_btm.stats->setAlignment(Qt::AlignCenter | Qt::AlignVCenter);
     statusLayout->addWidget(m_btm.stats, 0);
 
-    // Right: info icon
+    // Right: info icon (Hover only)
     m_btm.info = new QLabel(this);
     m_btm.info->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_btm.info->setCursor(Qt::ArrowCursor);
+    m_btm.info->setToolTip(
+        tr("JSON File Information"));  // Tooltip shows on hover
     statusLayout->addWidget(m_btm.info, 0);
 
     lay_content->addWidget(statusBarWidget);
@@ -284,13 +408,32 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     });
     addAction(actionExportSelection);
 
-    if (cfg.showFilterBar()) {
-        auto* actionFilter = new QAction(this);
-        actionFilter->setShortcut(cfg.shortcutFilter());
-        connect(actionFilter, &QAction::triggered, m_top.filter,
-                qOverload<>(&QLineEdit::setFocus));
-        addAction(actionFilter);
-    }
+    // Search/Filter Shortcut (Ctrl+F)
+    auto* actionSearch = new QAction(this);
+    actionSearch->setShortcut(cfg.shortcutFilter());
+    actionSearch->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(actionSearch, &QAction::triggered, this, [this]() {
+        m_top.input->setFocus();
+        m_top.input->selectAll();
+    });
+    addAction(actionSearch);
+
+    // Tab to toggle filter/search mode
+    auto* actionToggleMode = new QAction(this);
+    actionToggleMode->setShortcut(QKeySequence(Qt::Key_Tab));
+    actionToggleMode->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    connect(actionToggleMode, &QAction::triggered, this, [this]() {
+        if (m_top.input->hasFocus()) {
+            m_top.action_global->toggle();
+        }
+    });
+    addAction(actionToggleMode);
+
+    auto* actionSearchNext = new QAction(this);
+    actionSearchNext->setShortcut(QKeySequence::FindNext);
+    connect(actionSearchNext, &QAction::triggered, this,
+            &JsonTreeViewer::startSearch);
+    addAction(actionSearchNext);
 
     connect(
         m_view->selectionModel(), &QItemSelectionModel::currentChanged, this,
@@ -843,4 +986,28 @@ void JsonTreeViewer::updateTheme(int theme)
     if (m_model) {
         m_model->refreshDesign();
     }
+}
+
+void JsonTreeViewer::startSearch()
+{
+    QString text = m_top.input->text();
+    if (text.isEmpty())
+        return;
+
+    auto strategy = m_model->strategy();
+    if (!strategy)
+        return;
+
+    SearchQuery query;
+    query.text          = text;
+    query.type          = SearchType::All;
+    query.caseSensitive = false;
+
+    m_search_panel->startSearch(m_model, strategy, query);
+}
+
+void JsonTreeViewer::cancelSearch()
+{
+    if (m_search_panel)
+        m_search_panel->cancelSearch();
 }

@@ -11,6 +11,7 @@ add_executable(test_strategies
     test_strategies.cpp
     ../src/jsontreemodel.cpp
     ../src/config.cpp
+    ../src/common.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -49,6 +50,7 @@ add_executable(test_paging
     test_paging.cpp
     ../src/jsontreemodel.cpp
     ../src/config.cpp
+    ../src/common.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -86,6 +88,7 @@ add_executable(test_copy
     test_copy.cpp
     ../src/jsontreemodel.cpp
     ../src/config.cpp
+    ../src/common.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -123,6 +126,7 @@ add_executable(test_async_loading
     test_async_loading.cpp
     ../src/jsontreemodel.cpp
     ../src/config.cpp
+    ../src/common.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -160,6 +164,7 @@ add_executable(test_string_parsing
     test_string_parsing.cpp
     ../src/jsontreemodel.cpp
     ../src/config.cpp
+    ../src/common.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -197,6 +202,7 @@ add_executable(test_errors
     test_errors.cpp
     ../src/jsontreemodel.cpp
     ../src/config.cpp
+    ../src/common.cpp
     ../src/loadworker.cpp
     ../src/jsonnode.h
     ../src/strategies/jsonstrategy.cpp
@@ -229,7 +235,76 @@ set_tests_properties(ErrorTests PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-# Group all targets in this directory into a "Tests" folder in IDEs
+# Search test executable
+add_executable(test_search
+    test_search.cpp
+    ../src/navigation/searchworker.cpp
+    ../src/strategies/jsonstrategy.cpp
+    ../src/strategies/smallfilestrategy.cpp
+    ../src/strategies/mediumfilestrategy.cpp
+    ../src/strategies/largefilestrategy.cpp
+    ../src/strategies/extremefilestrategy.cpp
+    ../src/memorymappedfile.cpp
+    ../src/config.cpp
+    ../src/common.cpp
+)
+
+target_include_directories(test_search PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
+)
+
+target_link_libraries(test_search PRIVATE
+    simdjson_static
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
+    Qt6::Test
+)
+
+add_test(NAME SearchTests COMMAND test_search)
+set_tests_properties(SearchTests PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# Navigation test executable
+add_executable(test_navigation
+    test_navigation.cpp
+    ../src/navigation/pathnavigator.cpp
+    ../src/jsontreeview.cpp
+    ../src/jsontreedelegate.cpp
+    ../src/jsontreemodel.cpp
+    ../src/config.cpp
+    ../src/common.cpp
+    ../src/loadworker.cpp
+    ../src/jsonnode.h
+    ../src/strategies/jsonstrategy.cpp
+    ../src/strategies/smallfilestrategy.cpp
+    ../src/strategies/mediumfilestrategy.cpp
+    ../src/strategies/largefilestrategy.cpp
+    ../src/strategies/extremefilestrategy.cpp
+    ../src/memorymappedfile.cpp
+)
+
+target_include_directories(test_navigation PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../simdjson
+    ${seersdk_SOURCE_DIR}
+)
+
+target_link_libraries(test_navigation PRIVATE
+    simdjson_static
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Svg
+    Qt6::Test
+)
+
+add_test(NAME NavigationTests COMMAND test_navigation)
+set_tests_properties(NavigationTests PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# Group all targets
 set(SUB_TEST_TARGETS 
     test_strategies 
     test_paging 
@@ -237,6 +312,8 @@ set(SUB_TEST_TARGETS
     test_async_loading 
     test_string_parsing 
     test_errors
+    test_search
+    test_navigation
 )
 foreach(target_name ${SUB_TEST_TARGETS})
     set_property(TARGET ${target_name} PROPERTY FOLDER "Tests")

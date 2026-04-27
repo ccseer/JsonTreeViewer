@@ -388,7 +388,8 @@ JsonViewerStrategy::CountResult JsonViewerStrategy::countLocalBufferChildren(
             }
             return {0, error, offset};
         }
-        return {static_cast<quint32>(count_res.value_unsafe()), QString(), 0};
+        return {static_cast<quint32>(count_res.value_unsafe()), QString(), 0,
+                false};
     }
     else if (type == simdjson::ondemand::json_type::array) {
         auto arr_res = val.get_array();
@@ -412,7 +413,8 @@ JsonViewerStrategy::CountResult JsonViewerStrategy::countLocalBufferChildren(
             }
             return {0, error, offset};
         }
-        return {static_cast<quint32>(count_res.value_unsafe()), QString(), 0};
+        return {static_cast<quint32>(count_res.value_unsafe()), QString(), 0,
+                true};
     }
 
     return {0, QString(), 0};
@@ -449,7 +451,7 @@ JsonViewerStrategy::CountResult JsonViewerStrategy::countChildrenAtPointer(
         auto count_res = obj_res.value_unsafe().count_fields();
         if (!count_res.error())
             return {static_cast<quint32>(count_res.value_unsafe()), QString(),
-                    0};
+                    0, false};
     }
 
     auto arr_res = value.get_array();
@@ -457,7 +459,7 @@ JsonViewerStrategy::CountResult JsonViewerStrategy::countChildrenAtPointer(
         auto count_res = arr_res.value_unsafe().count_elements();
         if (!count_res.error())
             return {static_cast<quint32>(count_res.value_unsafe()), QString(),
-                    0};
+                    0, true};
     }
 
     return {0, QString(), 0};

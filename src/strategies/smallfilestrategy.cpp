@@ -32,6 +32,7 @@ void SmallFileStrategy::getRootMetadata(QString& pointer,
     byte_length = m_json_data.size();
     auto result = countLocalBufferChildren(dataPtr(), dataSize());
     child_count = result.count;
+    m_is_array  = result.is_array;
 
     // Store error in metrics if parsing failed
     if (!result.error.isEmpty()) {
