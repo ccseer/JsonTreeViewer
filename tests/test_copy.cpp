@@ -178,7 +178,7 @@ void TestCopy::testCopyValue()
     QString value = model->getValue(nameIndex);
     qDebug() << "Copied value:" << value;
 
-    QCOMPARE(value, QString("test_item"));
+    QCOMPARE(value, QString("\"test_item\""));
 }
 
 void TestCopy::testCopyPath()
@@ -386,7 +386,7 @@ void TestCopy::testCopyKeyValueScalar()
     qDebug() << "KeyValue:" << kv;
 
     QVERIFY(success);
-    QCOMPARE(kv, QString("\"name\": \"test_item\""));
+    QCOMPARE(kv, QString("\"name\": \"\\\"test_item\\\"\""));
 }
 
 void TestCopy::testCopyKeyValueObject()

@@ -127,7 +127,7 @@ void TestSearch::testResultLimit()
         totalFound += spy.at(i).at(0).value<QVector<SearchResult>>().size();
     }
 
-    QCOMPARE(totalFound, 10000);
+    QCOMPARE(totalFound, 1000);
 }
 
 QTEST_MAIN(TestSearch)

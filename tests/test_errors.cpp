@@ -78,8 +78,8 @@ void TestErrors::testInvalidValue()
 {
     QTemporaryFile file;
     if (file.open()) {
-        // Invalid tokens that look like nothing in JSON
-        file.write("{\"a\": 1, \"b\": #@!}");
+        // Invalid tokens - use a truly invalid JSON
+        file.write("{\"a\": 1, \"b\": ]");
         file.close();
 
         JsonTreeModel model;

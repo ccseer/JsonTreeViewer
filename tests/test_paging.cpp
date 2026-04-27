@@ -421,8 +421,8 @@ void TestPaging::testExtremeArrayPaging()
 
     QVERIFY(dataIndex.isValid());
 
-    // Expand the array
-    loadChildren(model, dataIndex);
+    // Expand the array (use longer timeout for 1.2GB file)
+    loadChildren(model, dataIndex, 60000);  // 60 second timeout
 
     // Should have virtual page nodes (page size = 100 for Extreme)
     int childCount = model->rowCount(dataIndex);

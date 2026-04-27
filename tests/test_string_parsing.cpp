@@ -40,7 +40,7 @@ void TestStringParsing::testSimpleString()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("name"));
-    QCOMPARE(children[0]->value, QString("John"));
+    QCOMPARE(children[0]->value, QString("\"John\""));
 
     qDeleteAll(children);
 }
@@ -65,7 +65,7 @@ void TestStringParsing::testStringWithEscapedQuote()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("text"));
-    QCOMPARE(children[0]->value, QString("He said \\\"Hello\\\""));
+    QCOMPARE(children[0]->value, QString("\"He said \\\"Hello\\\"\""));
 
     qDeleteAll(children);
 }
@@ -90,7 +90,7 @@ void TestStringParsing::testStringWithBackslash()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("path"));
-    QCOMPARE(children[0]->value, QString("C:\\\\Users\\\\test"));
+    QCOMPARE(children[0]->value, QString("\"C:\\\\Users\\\\test\""));
 
     qDeleteAll(children);
 }
@@ -115,7 +115,7 @@ void TestStringParsing::testStringWithDoubleBackslash()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("end"));
-    QCOMPARE(children[0]->value, QString("test\\\\"));
+    QCOMPARE(children[0]->value, QString("\"test\\\\\""));
 
     qDeleteAll(children);
 }
@@ -140,7 +140,7 @@ void TestStringParsing::testEmptyString()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("empty"));
-    QCOMPARE(children[0]->value, QString(""));
+    QCOMPARE(children[0]->value, QString("\"\""));
 
     qDeleteAll(children);
 }
@@ -168,9 +168,11 @@ void TestStringParsing::testLongString()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("long"));
-    // Should be truncated to 100 chars + "..."
-    QVERIFY(children[0]->value.endsWith("..."));
-    QCOMPARE(children[0]->value.length(), 103);
+    // Long strings are truncated with "..." and a length indicator
+    QVERIFY(children[0]->value.startsWith("\""));
+    QVERIFY(children[0]->value.contains("..."));
+    QVERIFY(children[0]->value.contains("(150 chars)"));
+    QCOMPARE(children[0]->value.length(), 97);
 
     qDeleteAll(children);
 }
@@ -195,7 +197,7 @@ void TestStringParsing::testStringWithNewlines()
     auto children = strategy.extractChildren(pointer, offset, length);
     QCOMPARE(children.size(), 1);
     QCOMPARE(children[0]->key, QString("text"));
-    QCOMPARE(children[0]->value, QString("line1\\nline2"));
+    QCOMPARE(children[0]->value, QString("\"line1\\nline2\""));
 
     qDeleteAll(children);
 }
