@@ -5,6 +5,7 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QEvent>
 #include <QFile>
 #include <QLabel>
 #include <QLineEdit>
@@ -13,6 +14,7 @@
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QToolTip>
 #include <QUrl>
 
 #include "config.h"
@@ -30,11 +32,6 @@
 #define qprintt qDebug() << "[JsonTreeViewer]"
 
 using namespace jtv::ui;
-
-namespace {
-constexpr auto g_ctrlbar_btn_sz      = 30;
-constexpr auto g_ctrlbar_btn_icon_sz = 24;
-}  // namespace
 
 JsonTreeViewer::JsonTreeViewer(QWidget* parent) : ViewerBase(parent)
 {
@@ -61,51 +58,48 @@ void JsonTreeViewer::initTopWnd()
     m_top.input->setClearButtonEnabled(true);
     layout->addWidget(m_top.input, 1);
 
-    // Global Search Toggle Icon
-    const auto dpr         = options()->dpr();
-    const QColor iconColor = qApp->palette().color(QPalette::PlaceholderText);
-
-    m_top.action_global
-        = new QAction(svgIcon(g_svg_filter, iconColor, 16, dpr), "", this);
-    m_top.action_global->setCheckable(true);
-    m_top.action_global->setToolTip(
+    m_top.btn_global = new QPushButton(this);
+    m_top.btn_global->setCheckable(true);
+    m_top.btn_global->setFlat(true);
+    m_top.btn_global->setFocusPolicy(Qt::NoFocus);
+    m_top.btn_global->setToolTip(
         tr("Deep Search Mode (%1 to Toggle)")
             .arg(Config::ins().shortcutToggleMode().toString(
                 QKeySequence::NativeText)));
-    m_top.input->addAction(m_top.action_global, QLineEdit::TrailingPosition);
+    layout->addWidget(m_top.btn_global);
 
-    connect(m_top.action_global, &QAction::toggled, this,
-            [this, iconColor, dpr](bool checked) {
-                m_top.action_global->setIcon(svgIcon(
-                    checked ? g_svg_globe : g_svg_filter,
-                    checked ? jtv::ui::Colors::Accent : iconColor, 16, dpr));
-                m_top.input->setPlaceholderText(
-                    checked ? tr("Deep search entire file (Enter)...")
-                            : tr("Filter current view..."));
+    connect(
+        m_top.btn_global, &QPushButton::toggled, this, [this](bool checked) {
+            // Update only this button's icon
+            const auto dpr   = m_dpr;
+            QColor textColor = QColor(m_isDark ? jtv::ui::Colors::DarkText
+                                               : jtv::ui::Colors::LightText);
+            m_top.btn_global->setIcon(svgIcon(
+                checked ? g_svg_globe : g_svg_filter, textColor, 16, dpr));
 
-                // Reset state on toggle
-                m_top.input->clear();
-                if (checked) {
-                    // Mode: Filter -> Search
-                    if (m_search_panel)
-                        m_search_panel->hide();
-                    // Force reset filter to show all items
-                    if (auto* proxy
-                        = qobject_cast<TreeFilterProxyModel*>(m_view->model()))
-                        proxy->updateFilter("");
+            // Reset search state
+            m_top.input->setPlaceholderText(
+                checked ? tr("Deep search entire file (Enter)...")
+                        : tr("Filter current view..."));
+            m_top.input->clear();
+            if (checked) {
+                if (m_search_panel)
+                    m_search_panel->hide();
+                if (auto* proxy
+                    = qobject_cast<TreeFilterProxyModel*>(m_view->model()))
+                    proxy->updateFilter("");
+            }
+            else {
+                if (m_search_panel) {
+                    m_search_panel->clear();
+                    m_search_panel->hide();
                 }
-                else {
-                    // Mode: Search -> Filter
-                    if (m_search_panel) {
-                        m_search_panel->clear();
-                        m_search_panel->hide();
-                    }
-                }
-                m_top.input->setFocus();
-            });
+            }
+            m_top.input->setFocus();
+        });
 
     connect(m_top.input, &QLineEdit::returnPressed, this, [this]() {
-        if (m_top.action_global->isChecked()) {
+        if (m_top.btn_global->isChecked()) {
             startSearch();
         }
     });
@@ -119,13 +113,13 @@ void JsonTreeViewer::initBtmWnd()
     // Left: Breadcrumbs container
     m_btm.breadcrumbs_wnd = new QWidget(this);
     m_btm.breadcrumbs_lay = new QHBoxLayout(m_btm.breadcrumbs_wnd);
+    m_btm.breadcrumbs_lay->setContentsMargins(0, 0, 0, 0);
     m_btm.breadcrumbs_lay->setSpacing(0);
     statusLayout->addWidget(m_btm.breadcrumbs_wnd, 0);
 
     // Separator between breadcrumbs and value
     m_btm.value_label = new QLabel(this);
     m_btm.value_label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_btm.value_label->setStyleSheet(g_qss_value_label);
     statusLayout->addWidget(m_btm.value_label, 1);
 
     // Center: node statistics
@@ -159,58 +153,8 @@ QSize JsonTreeViewer::getContentSize() const
 
 void JsonTreeViewer::updateDPR(qreal r)
 {
-    layout()->setSpacing(6 * r);
-    auto font = qApp->font();
-    font.setPixelSize(12 * r);
-    if (m_top.wnd_bg) {
-        auto height_top = 30 * r;
-        m_top.wnd_bg->setFixedHeight(height_top);
-        m_top.wnd_bg->layout()->setContentsMargins(9 * r, 0, 9 * r, 0);
-        m_top.wnd_bg->layout()->setSpacing(0);
-        m_top.input->setFont(font);
-        m_top.input->setFixedHeight(height_top);
-    }
-    if (m_search_panel) {
-        m_search_panel->updateDPR(r);
-    }
-    if (m_btm.wnd_bg) {
-        // Slightly taller for breadcrumbs
-        m_btm.wnd_bg->setFixedHeight(24 * r);
-        m_btm.wnd_bg->layout()->setContentsMargins(12 * r, 0, 12 * r, 0);
-        m_btm.wnd_bg->layout()->setSpacing(12);
-        m_btm.breadcrumbs_lay->setContentsMargins(0, 0, 0, 0);
-        // Status bar labels
-        auto sbFont = qApp->font();
-        sbFont.setPixelSize(11 * r);
-        if (m_btm.value_label) {
-            m_btm.value_label->setFont(sbFont);
-        }
-        if (m_btm.stats) {
-            m_btm.stats->setFont(sbFont);
-        }
-    }
-    if (m_progress_bar) {
-        m_progress_bar->setFixedHeight(2 * r);
-    }
-    if (m_btm.info) {
-        auto infoFont = qApp->font();
-        infoFont.setPixelSize(13 * r);
-        infoFont.setBold(true);
-        m_btm.info->setFont(infoFont);
-    }
-
-    m_view->upadteDPR(r);
-
-    if (m_btn_text_view) {
-        m_btn_text_view->setFixedSize(g_ctrlbar_btn_sz * r,
-                                      g_ctrlbar_btn_sz * r);
-        m_btn_text_view->setIconSize(
-            QSize(g_ctrlbar_btn_icon_sz * r, g_ctrlbar_btn_icon_sz * r));
-    }
-
-    if (m_model) {
-        m_model->refreshDesign();
-    }
+    m_dpr = r;
+    reapplyStyles();
 }
 
 void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
@@ -231,12 +175,12 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     timer->setSingleShot(true);
     connect(m_top.input, &QLineEdit::textChanged, this,
             [timer, this](const QString&) {
-                if (!m_top.action_global->isChecked()) {
+                if (!m_top.btn_global->isChecked()) {
                     timer->start(300);
                 }
             });
     connect(timer, &QTimer::timeout, proxy_model, [proxy_model, this] {
-        if (m_top.action_global->isChecked()) {
+        if (m_top.btn_global->isChecked()) {
             qprint_err;
             return;  // Don't apply filter in search mode
         }
@@ -255,13 +199,14 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     m_progress_bar->setRange(0, 0);  // Indeterminate
     m_progress_bar->setTextVisible(false);
     m_progress_bar->setFixedHeight(2);
-    m_progress_bar->setStyleSheet(g_qss_progress_bar);
     m_progress_bar->hide();
     lay_content->addWidget(m_progress_bar);
 
     m_search_panel = new SearchPanel(m_model, this);
     m_search_panel->hide();
     lay_content->addWidget(m_search_panel);
+
+    // Navigation connections
     connect(m_search_panel, &SearchPanel::targetResolved, this,
             [this](const QModelIndex& index) {
                 if (!index.isValid()) {
@@ -291,6 +236,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                     m_view->setFocus();
                 }
             });
+
     connect(m_search_panel, &SearchPanel::navigationFailed, this,
             [this](const QString& msg) {
                 emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
@@ -353,7 +299,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     actionToggleMode->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     connect(actionToggleMode, &QAction::triggered, this, [this]() {
         if (m_top.input->hasFocus()) {
-            m_top.action_global->toggle();
+            m_top.btn_global->toggle();
         }
     });
     addAction(actionToggleMode);
@@ -379,11 +325,10 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
             if (!current.isValid())
                 return;
 
-            qreal dpr = options()->dpr();
             QColor separatorColor
                 = qApp->palette().color(QPalette::PlaceholderText);
             QIcon sepIcon
-                = svgIcon(g_svg_chevron_right, separatorColor, 16, dpr);
+                = svgIcon(g_svg_chevron_right, separatorColor, 16, m_dpr);
 
             // Collect parents for breadcrumbs
             QList<QModelIndex> hierarchy;
@@ -400,7 +345,7 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                 // Add separator before segment (except the first one)
                 if (i > 0) {
                     QLabel* sep = new QLabel(this);
-                    sep->setPixmap(sepIcon.pixmap(16 * dpr, 16 * dpr));
+                    sep->setPixmap(sepIcon.pixmap(16 * m_dpr, 16 * m_dpr));
                     m_btm.breadcrumbs_lay->addWidget(sep);
                 }
 
@@ -409,13 +354,14 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                 btn->setFlat(true);
                 btn->setCursor(Qt::PointingHandCursor);
                 // Premium feel: subtle hover color via stylesheet
-                bool isDark
-                    = qApp->palette().color(QPalette::Window).lightness() < 128;
                 btn->setStyleSheet(
                     QString(g_qss_breadcrumb_btn)
-                        .arg(qApp->palette().color(QPalette::WindowText).name())
-                        .arg(isDark ? "rgba(255, 255, 255, 30)"
-                                    : "rgba(0, 0, 0, 30)"));
+                        .arg(palette().color(QPalette::WindowText).name())
+                        .arg(m_isDark ? "rgba(255, 255, 255, 30)"
+                                      : "rgba(0, 0, 0, 30)")
+                        .arg(qRound(2 * m_dpr))    // PaddingV
+                        .arg(qRound(4 * m_dpr))    // PaddingH
+                        .arg(qRound(4 * m_dpr)));  // Radius
 
                 connect(btn, &QPushButton::clicked, this, [this, hIdx]() {
                     m_view->selectionModel()->setCurrentIndex(
@@ -645,8 +591,10 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     if (lay_ctrlbar) {
         lay_ctrlbar->addStretch();
         m_btn_text_view = new QPushButton(this);
+        m_btn_text_view->setObjectName("textViewBtn");
         m_btn_text_view->setFlat(true);
         m_btn_text_view->setToolTip("Text View");
+        m_btn_text_view->installEventFilter(this);
         m_btn_text_view->setFocusPolicy(Qt::NoFocus);
         lay_ctrlbar->addWidget(m_btn_text_view);
         connect(m_btn_text_view, &QPushButton::clicked, this,
@@ -704,13 +652,13 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             m_view->setFileMode(model->fileMode());
 
             // Disable Deep Search for small files since they are fully loaded
-            if (m_top.action_global) {
+            if (m_top.btn_global) {
                 if (model->fileMode() == FileMode::Small) {
-                    m_top.action_global->setChecked(false);
-                    m_top.action_global->setVisible(false);
+                    m_top.btn_global->setChecked(false);
+                    m_top.btn_global->setVisible(false);
                 }
                 else {
-                    m_top.action_global->setVisible(true);
+                    m_top.btn_global->setVisible(true);
                 }
             }
 
@@ -903,9 +851,6 @@ void JsonTreeViewer::updateStatusBarStats(JsonTreeModel* model)
     if (!m_btm.stats || !model) {
         return;
     }
-
-    // For now, just show a placeholder
-    // TODO: Implement node counting and depth calculation
     m_btm.stats->setText("");
 }
 
@@ -920,77 +865,162 @@ void JsonTreeViewer::updateTheme(int theme)
         isDark = true;
     }
     else {
-        // Auto - 0 is light, 1 is dark in Seer
         isDark = (theme == 1);
     }
 
+    m_isDark = isDark;
+    reapplyStyles();
+}
+
+void JsonTreeViewer::reapplyStyles()
+{
     using namespace jtv::ui::Colors;
+    qreal r = m_dpr;
 
-    // 1. Update Top Bar
+    // 0. Update Palette for basic inheritance
+    QPalette p = palette();
+    QColor textC(m_isDark ? DarkText : LightText);
+    QColor bgC(m_isDark ? DarkBG : LightBG);
+    p.setColor(QPalette::Window, QColor(m_isDark ? DarkSurface : LightSurface));
+    p.setColor(QPalette::WindowText, textC);
+    p.setColor(QPalette::Base, bgC);
+    p.setColor(QPalette::Text, textC);
+    p.setColor(QPalette::PlaceholderText,
+               QColor(m_isDark ? DarkTextDim : LightTextDim));
+    setPalette(p);
+    if (m_view)
+        m_view->setPalette(p);
+
+    // 1. Layout & Fonts
+    layout()->setSpacing(6 * r);
+    auto font = qApp->font();
+    font.setPixelSize(12 * r);
+    this->setFont(font);
+
+    // 2. Top Bar
     if (m_top.wnd_bg) {
-        QString qss = QString(g_qss_top_bar)
-                          .arg(isDark ? DarkSurface : LightSurface)
-                          .arg(isDark ? DarkBorder : LightBorder)
-                          .arg(isDark ? DarkInput : LightInput)
-                          .arg(isDark ? DarkText : LightText)
-                          .arg(Accent);
-        m_top.wnd_bg->setStyleSheet(qss);
+        m_top.wnd_bg->setFixedHeight(30 * r);
+        m_top.wnd_bg->layout()->setContentsMargins(9 * r, 0, 9 * r, 0);
+        m_top.input->setFont(font);
+        m_top.input->setFixedHeight(30 * r);
+
+        m_top.wnd_bg->setStyleSheet(
+            QString(g_qss_top_bar)
+                .arg("transparent")
+                .arg(m_isDark ? DarkBorder : LightBorder)
+                .arg(m_isDark ? DarkInput : LightInput)
+                .arg(m_isDark ? DarkText : LightText)
+                .arg(Accent)
+                .arg(qRound(4 * r))     // Radius
+                .arg(qRound(4 * r))     // PaddingV
+                .arg(qRound(10 * r)));  // PaddingH
     }
 
-    // 2. Update Icons
-    const auto dpr   = options()->dpr();
-    QColor textColor = QColor(isDark ? DarkText : LightText);
-    // QColor dimColor = QColor(isDark ? DarkTextDim : LightTextDim);
+    // 3. Bottom Bar & Breadcrumbs
+    if (m_btm.wnd_bg) {
+        m_btm.wnd_bg->setFixedHeight(26 * r);
+        m_btm.wnd_bg->layout()->setContentsMargins(12 * r, 0, 12 * r, 0);
+        m_btm.wnd_bg->setStyleSheet(
+            QString(
+                "QWidget#btmBar { "
+                "  background-color: %1; "
+                "  border-top: 1px solid %2; "
+                "} "
+                "QPushButton#textViewBtn { "
+                "  border: none; background: transparent; border-radius: 4px; "
+                "} "
+                "QPushButton#textViewBtn:hover { "
+                "  background-color: rgba(128, 128, 128, 40); "
+                "} "
+                "QPushButton#textViewBtn:pressed { "
+                "  background-color: rgba(128, 128, 128, 60); "
+                "}")
+                .arg(m_isDark ? DarkSurface : LightSurface)
+                .arg(m_isDark ? DarkBorder : LightBorder));
+        auto sbFont = qApp->font();
+        sbFont.setPixelSize(12 * r);
+        m_btm.breadcrumbs_wnd->setFont(sbFont);
 
+        QPalette pDim = palette();
+        pDim.setColor(QPalette::WindowText,
+                      QColor(m_isDark ? DarkTextDim : LightTextDim));
+
+        if (m_btm.value_label) {
+            m_btm.value_label->setFont(sbFont);
+            m_btm.value_label->setPalette(pDim);
+        }
+        if (m_btm.stats) {
+            m_btm.stats->setFont(sbFont);
+            m_btm.stats->setPalette(pDim);
+        }
+        if (m_btm.info) {
+            m_btm.info->setFont(sbFont);
+            m_btm.info->setPalette(pDim);
+        }
+
+        // Update existing breadcrumb buttons
+        if (m_btm.breadcrumbs_lay) {
+            for (int i = 0; i < m_btm.breadcrumbs_lay->count(); ++i) {
+                auto* btn = qobject_cast<QPushButton*>(
+                    m_btm.breadcrumbs_lay->itemAt(i)->widget());
+                if (!btn) {
+                    continue;
+                }
+                btn->setFont(sbFont);
+                btn->setStyleSheet(
+                    QString(g_qss_breadcrumb_btn)
+                        .arg(palette().color(QPalette::WindowText).name())
+                        .arg(m_isDark ? "rgba(255, 255, 255, 30)"
+                                      : "rgba(0, 0, 0, 30)")
+                        .arg(qRound(2 * r))    // PaddingV
+                        .arg(qRound(4 * r))    // PaddingH
+                        .arg(qRound(4 * r)));  // Radius
+            }
+        }
+    }
+
+    // 4. Icons & Buttons
+    QColor textColor = QColor(m_isDark ? DarkText : LightText);
     if (m_btn_text_view) {
+        constexpr auto ctrlbar_btn_sz      = 30;
+        constexpr auto ctrlbar_btn_icon_sz = 24;
+        m_btn_text_view->setFixedSize(ctrlbar_btn_sz * r, ctrlbar_btn_sz * r);
+        m_btn_text_view->setIconSize(
+            QSize(ctrlbar_btn_icon_sz * r, ctrlbar_btn_icon_sz * r));
         m_btn_text_view->setIcon(
-            svgIcon(g_svg_article, textColor, g_ctrlbar_btn_icon_sz, dpr));
+            svgIcon(g_svg_article, textColor, ctrlbar_btn_icon_sz, r));
+    }
+    if (m_top.btn_global) {
+        m_top.btn_global->setIcon(
+            svgIcon(m_top.btn_global->isChecked() ? g_svg_globe : g_svg_filter,
+                    textColor, 16, r));
     }
 
-    if (m_top.action_global) {
-        // Update filter icon color
-        m_top.action_global->setIcon(svgIcon(
-            m_top.action_global->isChecked() ? g_svg_globe : g_svg_filter,
-            m_top.action_global->isChecked() ? QColor(Accent) : textColor, 16,
-            dpr));
-    }
-
-    // 3. Update Progress Bar
+    // 5. Components
     if (m_progress_bar) {
-        m_progress_bar->setStyleSheet(QString(g_qss_progress_bar).arg(Accent));
+        m_progress_bar->setFixedHeight(2 * r);
+        m_progress_bar->setStyleSheet(
+            QString(g_qss_progress_bar).arg(Accent).arg(qRound(1 * r)));
     }
-
-    // 4. Update Bottom Value Label
-    if (m_btm.value_label) {
-        m_btm.value_label->setStyleSheet(
-            QString(g_qss_value_label)
-                .arg(isDark ? DarkTextDim : LightTextDim));
-    }
-
-    // 5. Update Search Panel
     if (m_search_panel) {
-        m_search_panel->updateTheme(isDark);
+        m_search_panel->updateDPR(r);
+        m_search_panel->updateTheme(m_isDark);
     }
-
-    if (m_model) {
+    if (m_model)
         m_model->refreshDesign();
-    }
 }
 
 void JsonTreeViewer::startSearch()
 {
     QString text = m_top.input->text();
-    if (text.isEmpty())
+    if (text.isEmpty() || !m_model)
         return;
-
     auto strategy = m_model->strategy();
     if (!strategy)
         return;
 
     SearchQuery query;
-    query.text          = text;
-    query.type          = SearchType::All;
-    query.caseSensitive = false;
-
+    query.text = text;
+    query.type = SearchType::All;
     m_search_panel->startSearch(strategy, query);
 }

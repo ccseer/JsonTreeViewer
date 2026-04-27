@@ -24,16 +24,12 @@ public:
     explicit SearchPanel(JsonTreeModel* model, QWidget* parent = nullptr);
     ~SearchPanel() override;
 
+    void clear();
     void startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
                      const SearchQuery& query);
-    void updateTheme(bool isDark);
-    void clear();
-    void updateDPR(qreal r);
 
-    QListView* listView() const
-    {
-        return m_view;
-    }
+    void updateTheme(bool isDark);
+    void updateDPR(qreal r);
 
 signals:
     void targetResolved(const QModelIndex& index);
@@ -46,18 +42,24 @@ private slots:
     void onResultClicked(const QModelIndex& index);
     void onNavigationCompleted(NavigationError error, const QString& message);
 
+    void reapplyStyles();
+
 private:
     void cancelSearch();
 
     QWidget* m_banner;
     QLabel* m_label_query;
     QLabel* m_label_count;
-    QProgressBar* m_progress;
+    QWidget* m_progress_fill;
     QPushButton* m_btn_cancel;
     QListView* m_view;
 
     // Encapsulated Logic
-    QStandardItemModel* m_results_model;
-    PathNavigator* m_navigator = nullptr;
-    QPointer<JsonTreeModel> m_model_ref;
+    QStandardItemModel* m_results_model = nullptr;
+    PathNavigator* m_navigator          = nullptr;
+    QPointer<JsonTreeModel> m_model_ref = nullptr;
+    bool m_is_navigating                = false;
+
+    bool m_isDark = false;
+    qreal m_dpr   = 1.0;
 };

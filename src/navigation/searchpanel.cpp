@@ -1,5 +1,6 @@
 #include "searchpanel.h"
 
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListView>
@@ -20,53 +21,55 @@ using namespace jtv::ui;
 SearchPanel::SearchPanel(JsonTreeModel* model, QWidget* parent)
     : QWidget(parent), m_model_ref(model)
 {
+    setObjectName("searchPanel");
     auto* mainLay = new QVBoxLayout(this);
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(0);
 
     m_results_model = new QStandardItemModel(this);
-    m_navigator     = new PathNavigator(this);
-    connect(m_navigator, &PathNavigator::navigationCompleted, this,
-            &SearchPanel::onNavigationCompleted);
 
     // Banner UI
     m_banner = new QWidget(this);
     m_banner->setObjectName("searchBanner");
-    m_banner->setStyleSheet(g_qss_search_banner);
+    mainLay->addWidget(m_banner);
 
-    auto* bannerLay = new QHBoxLayout(m_banner);
-    bannerLay->setContentsMargins(12, 0, 8, 0);
-    bannerLay->setSpacing(10);
+    // Use GridLayout to stack progress fill behind controls
+    auto* bannerGrid = new QGridLayout(m_banner);
+    bannerGrid->setContentsMargins(0, 0, 0, 0);
+
+    // Progress Fill (Bottom Layer)
+    m_progress_fill = new QWidget(m_banner);
+    m_progress_fill->setObjectName("searchProgressFill");
+    m_progress_fill->setFixedWidth(0);
+    bannerGrid->addWidget(m_progress_fill, 0, 0);
+
+    // Controls (Top Layer)
+    auto* controlsContainer = new QWidget(m_banner);
+    auto* controlsLay       = new QHBoxLayout(controlsContainer);
 
     m_label_query = new QLabel(this);
-    m_label_query->setStyleSheet(g_qss_label_query);
-    bannerLay->addWidget(m_label_query, 1);
-
-    m_progress = new QProgressBar(this);
-    m_progress->setRange(0, 100);
-    m_progress->setTextVisible(false);
-    m_progress->hide();
-    bannerLay->addWidget(m_progress);
+    controlsLay->addWidget(m_label_query, 1);
 
     m_label_count = new QLabel(this);
-    m_label_count->setStyleSheet(g_qss_label_count);
-    bannerLay->addWidget(m_label_count);
+    controlsLay->addWidget(m_label_count);
 
-    m_btn_cancel = new QPushButton("×", this);
-    m_btn_cancel->setToolTip(tr("Cancel Search"));
-    m_btn_cancel->setFixedWidth(24);
-    m_btn_cancel->hide();
-    bannerLay->addWidget(m_btn_cancel);
+    m_btn_cancel = new QPushButton(this);
+    m_btn_cancel->setToolTip(tr("Close Search"));
+    controlsLay->addWidget(m_btn_cancel);
 
-    mainLay->addWidget(m_banner);
+    bannerGrid->addWidget(controlsContainer, 0, 0);
 
     // List UI
     m_view = new QListView(this);
-    m_view->setFrameShape(QFrame::NoFrame);
-    m_view->setStyleSheet(g_qss_search_list);
     m_view->setModel(m_results_model);
+    m_view->setUniformItemSizes(true);
     m_view->setItemDelegate(new SearchResultDelegate(this));
     m_view->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_view->setFrameShape(QFrame::NoFrame);
+    m_view->setLineWidth(0);
+    m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_view->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     mainLay->addWidget(m_view);
 
     connect(m_view, &QListView::clicked, this, &SearchPanel::onResultClicked);
@@ -91,8 +94,8 @@ void SearchPanel::startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
 
     m_label_query->setText(tr("Searching: %1").arg(query.text));
     m_label_count->setText(tr("Searching..."));
-    m_progress->setValue(0);
-    m_progress->show();
+    m_progress_fill->setFixedWidth(0);
+    m_progress_fill->show();
     m_btn_cancel->show();
     show();
 
@@ -106,20 +109,20 @@ void SearchPanel::startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
         }
     });
     connect(worker, &QObject::destroyed, thread, &QObject::deleteLater);
-    connect(this, &SearchPanel::cancelRequested, worker, [worker, thread]() {
+    connect(this, &SearchPanel::cancelRequested, this, [worker, thread]() {
+        // Calling from main thread, otherwise the call will be queued
         if (worker) {
             qprintt << "[SEARCH ASYNC] Requesting worker to stop";
             thread->requestInterruption();
-        }
-        else {
-            qprintt << "[SEARCH ASYNC] Worker already destroyed, cannot cancel";
         }
     });
     // Business logic
     connect(worker, &SearchWorker::resultsFound, this,
             &SearchPanel::onResultsFound);
-    connect(worker, &SearchWorker::progressUpdated, m_progress,
-            &QProgressBar::setValue);
+    connect(worker, &SearchWorker::progressUpdated, this, [this](int value) {
+        int targetWidth = (m_banner->width() * value) / 100;
+        m_progress_fill->setFixedWidth(targetWidth);
+    });
     connect(worker, &SearchWorker::finished, this,
             &SearchPanel::onSearchFinished);
     connect(thread, &QThread::started, worker, &SearchWorker::process);
@@ -131,8 +134,8 @@ void SearchPanel::startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
 void SearchPanel::cancelSearch()
 {
     emit cancelRequested();
-    m_btn_cancel->hide();
-    m_progress->hide();
+    m_progress_fill->setFixedWidth(0);
+    hide();
 }
 
 void SearchPanel::onResultsFound(const QVector<SearchResult>& results)
@@ -144,7 +147,11 @@ void SearchPanel::onResultsFound(const QVector<SearchResult>& results)
                                   : QString("%1: %2").arg(res.key).arg(res.value);
 
         item->setText(display);
-        item->setData(res.path, Qt::UserRole);
+        item->setData(res.path, SearchResultDelegate::kUserRolePath);
+        item->setData(res.key, SearchResultDelegate::kUserRoleKey);
+        item->setData(res.value, SearchResultDelegate::kUserRoleVal);
+        item->setData(QString(res.type), SearchResultDelegate::kUserRoleType);
+
         item->setToolTip(res.path);
         m_results_model->appendRow(item);
     }
@@ -153,33 +160,51 @@ void SearchPanel::onResultsFound(const QVector<SearchResult>& results)
 
 void SearchPanel::onSearchFinished(bool success)
 {
-    m_btn_cancel->hide();
-    m_progress->hide();
+    m_progress_fill->hide();
+
     if (success) {
         m_label_count->setText(
             tr("%1 results").arg(m_results_model->rowCount()));
     }
     else {
-        m_label_count->setText(tr("Failed or cancelled"));
+        m_label_count->setText(tr("Cancelled"));
     }
 }
 
 void SearchPanel::onResultClicked(const QModelIndex& index)
 {
-    QString path = index.data(Qt::UserRole).toString();
-    qprintt << "Result clicked: " << path;
-    if (!path.isEmpty() && m_model_ref) {
-        m_navigator->navigate(m_model_ref, path);
+    if (m_is_navigating) {
+        qprintt << "[SearchPanel] Still navigating, ignore click";
+        return;
     }
+
+    QString path = index.data(SearchResultDelegate::kUserRolePath).toString();
+    if (path.isEmpty())
+        return;
+
+    m_is_navigating = true;
+    m_view->setEnabled(false);
+
+    if (!m_navigator) {
+        m_navigator = new PathNavigator(this);
+        connect(m_navigator, &PathNavigator::navigationCompleted, this,
+                &SearchPanel::onNavigationCompleted);
+    }
+    m_navigator->navigate(m_model_ref.data(), path);
 }
 
 void SearchPanel::onNavigationCompleted(NavigationError error,
                                         const QString& message)
 {
+    m_is_navigating = false;
+    m_view->setEnabled(true);
+
     qprintt << "Navigation completed with error code:"
             << static_cast<int>(error) << "message:" << message;
     if (error == NavigationError::Success) {
-        emit targetResolved(m_navigator->currentIndex());
+        if (m_navigator) {
+            emit targetResolved(m_navigator->currentIndex());
+        }
     }
     else {
         emit navigationFailed(message);
@@ -193,18 +218,19 @@ void SearchPanel::clear()
     m_results_model->setHorizontalHeaderLabels({tr("Results")});
     m_label_query->clear();
     m_label_count->clear();
-    m_progress->hide();
+    m_progress_fill->hide();
     m_btn_cancel->hide();
     m_model_ref = nullptr;
 }
 
 void SearchPanel::updateDPR(qreal r)
 {
+    m_dpr = r;
     m_banner->setFixedHeight(32 * r);
-    m_banner->layout()->setContentsMargins(12 * r, 0, 8 * r, 0);
-    m_progress->setFixedWidth(80 * r);
-    m_progress->setFixedHeight(4 * r);
-    m_btn_cancel->setFixedWidth(24 * r);
+    if (auto* lay = m_banner->findChild<QHBoxLayout*>()) {
+        lay->setContentsMargins(12 * r, 0, 4 * r, 0);
+        lay->setSpacing(10 * r);
+    }
 
     QFont f1 = font();
     f1.setPixelSize(12 * r);
@@ -213,32 +239,69 @@ void SearchPanel::updateDPR(qreal r)
     f2.setPixelSize(11 * r);
     m_label_query->setFont(f1);
     m_label_count->setFont(f2);
+
+    m_btn_cancel->setFixedSize(25 * r, 25 * r);
+    m_btn_cancel->setIconSize(QSize(16 * r, 16 * r));
+
+    m_view->doItemsLayout();
+
+    reapplyStyles();
 }
 
 void SearchPanel::updateTheme(bool isDark)
 {
+    m_isDark = isDark;
+    reapplyStyles();
+}
+
+void SearchPanel::reapplyStyles()
+{
     using namespace jtv::ui::Colors;
 
+    // 0. Container background
+    setStyleSheet(QString("QWidget#searchPanel { background-color: %1; }")
+                      .arg(m_isDark ? DarkBG : LightBG));
+
     // 1. Banner style
-    m_banner->setStyleSheet(
-        QString(g_qss_search_banner)
-            .arg(isDark ? "#1A237E" : "#E8EAF6")  // stop0
-            .arg(isDark ? "#121858" : "#C5CAE9")  // stop1
-            .arg(isDark ? DarkBorder : LightBorder)
-            .arg(isDark ? DarkText : LightText)
-            .arg(isDark ? "#283593" : "#BDBDBD")  // progressBG
-            .arg(Accent)                          // progressChunk
-            .arg(isDark ? "#C5CAE9" : "#3F51B5")  // btnText
-            .arg(isDark ? "#FFFFFF" : "#1A237E")  // btnHover
+    m_banner->setStyleSheet(QString(g_qss_search_banner)
+                                .arg(m_isDark ? "#1E1E1E" : "#F5F5F5")  // BG
+                                .arg(m_isDark ? DarkBorder : LightBorder)
+                                .arg(m_isDark ? DarkText : LightText)
+                                .arg(qRound(2 * m_dpr))  //  QProgressBar height
+                                .arg(m_isDark ? DarkTextDim : LightTextDim)
+                                .arg(m_isDark ? DarkText : LightText)
+                                .arg(qRound(16 * m_dpr))  // FontSize
+                                .arg(qRound(4 * m_dpr))   // BtnPadding
+
     );
 
-    // 2. Labels
-    m_label_query->setStyleSheet(
-        QString(g_qss_label_query).arg(isDark ? DarkText : LightText));
-    m_label_count->setStyleSheet(
-        QString(g_qss_label_count).arg(isDark ? DarkTextDim : LightTextDim));
+    m_progress_fill->setStyleSheet(
+        QString("background-color: %1;")
+            .arg(m_isDark ? "rgba(2, 136, 209, 40)" : "rgba(2, 136, 209, 25)"));
 
-    // 3. View style
+    // 2. Palette (Base for all children)
+    QPalette p = palette();
+    QColor textC(m_isDark ? DarkText : LightText);
+    QColor dimC(m_isDark ? DarkTextDim : LightTextDim);
+    QColor bgC(m_isDark ? DarkBG : LightBG);
+
+    p.setColor(QPalette::Window, QColor(m_isDark ? DarkSurface : LightSurface));
+    p.setColor(QPalette::WindowText, textC);
+    p.setColor(QPalette::Base, bgC);
+    p.setColor(QPalette::Text, textC);
+    p.setColor(QPalette::PlaceholderText, dimC);
+    setPalette(p);
+
+    m_label_query->setPalette(p);
+    m_label_count->setPalette(p);
+    m_view->setPalette(p);
+
+    // 3. Icons
+    m_btn_cancel->setIcon(
+        jtv::ui::svgIcon(jtv::ui::g_svg_close,
+                         m_isDark ? DarkTextDim : LightTextDim, 16, m_dpr));
+
+    // 4. View style
     m_view->setStyleSheet(
-        QString(g_qss_search_list).arg(isDark ? DarkBG : LightBG));
+        QString(g_qss_search_list).arg(m_isDark ? DarkBG : LightBG));
 }

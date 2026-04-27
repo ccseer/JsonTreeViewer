@@ -34,6 +34,7 @@ public:
 private:
     void loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar) override;
     void onTextViewBtnClicked();
+    void reapplyStyles();
 
     void initTopWnd();
     void initBtmWnd();
@@ -44,9 +45,9 @@ private:
     void startSearch();
 
     struct {
-        QWidget* wnd_bg        = nullptr;
-        QLineEdit* input       = nullptr;
-        QAction* action_global = nullptr;
+        QWidget* wnd_bg         = nullptr;
+        QLineEdit* input        = nullptr;
+        QPushButton* btn_global = nullptr;
     } m_top;
 
     struct {
@@ -67,6 +68,9 @@ private:
 
     // Search & Navigation
     SearchPanel* m_search_panel = nullptr;
+
+    bool m_isDark = false;
+    qreal m_dpr   = 1.0;
 };
 
 /////////////////////////////////////////////////////////////////

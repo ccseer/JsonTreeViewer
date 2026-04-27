@@ -66,10 +66,8 @@ void PathNavigator::navigateNextLevel()
     QString segment = unescapeSegment(m_pathSegments[m_currentDepth]);
 
     // Check if children are already loaded.
-    // JsonTreeItem uses child_count for total children and children.size() for
-    // loaded.
-    if (parentItem->children.isEmpty()
-        && m_model->canFetchMore(m_currentIndex)) {
+    // Use children_loaded instead of isEmpty() to handle placeholders
+    if (!parentItem->children_loaded && m_model->canFetchMore(m_currentIndex)) {
         m_waitingForFetch = true;
         m_timeoutTimer->start(5000);  // 5 seconds timeout
         m_model->fetchMore(m_currentIndex);
@@ -131,18 +129,31 @@ JsonTreeItem* PathNavigator::findChild(JsonTreeItem* parentItem,
     if (parentItem->type == '[') {
         bool ok;
         int targetIdx = segment.toInt(&ok);
-        if (ok) {
-            int relativeIdx = targetIdx;
-            if (parentItem->is_virtual_page) {
-                relativeIdx -= parentItem->page_start;
-            }
+        if (!ok)
+            return nullptr;
 
+        if (parentItem->is_virtual_page) {
+            // This is a page node, its children are REAL elements
+            int relativeIdx = targetIdx - parentItem->page_start;
             if (relativeIdx >= 0 && relativeIdx < parentItem->children.size()) {
-                return parentItem->children[relativeIdx];
+                JsonTreeItem* child = parentItem->children[relativeIdx];
+                if (child && !child->isLoadingPlaceholder()) {
+                    return child;
+                }
             }
-            // Check for paged placeholder (only if we're not already in one)
-            if (!parentItem->is_virtual_page) {
+        }
+        else {
+            // This is the main array node
+            // Check if it's paged (has virtual page nodes as children)
+            if (!parentItem->children.isEmpty()
+                && parentItem->children[0]->is_virtual_page) {
                 return findInPagedArray(parentItem, targetIdx);
+            }
+            else {
+                // Small array, children are real elements
+                if (targetIdx >= 0 && targetIdx < parentItem->children.size()) {
+                    return parentItem->children[targetIdx];
+                }
             }
         }
     }

@@ -20,9 +20,9 @@ inline const QString Accent = "#0288D1";
 inline const QString DarkBG      = "#121212";
 inline const QString DarkSurface = "#1E1E1E";
 inline const QString DarkText    = "#EEEEEE";
-inline const QString DarkTextDim = "#9E9E9E";
+inline const QString DarkTextDim = "#BDBDBD";  // Brighter dim text
 inline const QString DarkBorder  = "#333333";
-inline const QString DarkInput   = "#121212";
+inline const QString DarkInput   = "#1E1E1E";  // Match surface
 
 // Light Theme
 inline const QString LightBG      = "#FFFFFF";
@@ -92,51 +92,56 @@ constexpr auto g_svg_array = R"SVG(
 // --- QSS (Qt Style Sheets) ---
 
 // Placeholder args: %1: SurfaceBG, %2: Border, %3: InputBG, %4: Text, %5:
-// Accent
+// Accent, %6: Radius, %7: PaddingV, %8: PaddingH
 constexpr auto g_qss_top_bar = R"(
     QWidget#topBar { background-color: %1; border: none; }
     QLineEdit { 
-        background-color: %3; border: 1px solid %2; border-radius: 4px; 
-        color: %4; padding: 4px 10px; selection-background-color: %5; 
+        background-color: %3; border: 1px solid %2; border-radius: %6px; 
+        color: %4; padding: %7px %8px; selection-background-color: %5; 
     }
     QLineEdit:focus { border: 1px solid %5; }
-    QComboBox { 
-        background-color: transparent; border: none; color: %4; font-size: 11px; 
-    }
+    QPushButton { border: none; background: transparent; border-radius: %6px; padding: %7px; }
+    QPushButton:hover { background-color: rgba(128, 128, 128, 40); }
+    QPushButton:pressed { background-color: rgba(128, 128, 128, 60); }
 )";
 
+// Placeholder args: %1: Accent, %2: Radius
 constexpr auto g_qss_progress_bar = R"(
     QProgressBar { border: none; background: transparent; } 
-    QProgressBar::chunk { background-color: %1; }
+    QProgressBar::chunk { background-color: %1; border-radius: %2px; }
 )";
 
 constexpr auto g_qss_breadcrumb_btn = R"(
-    QPushButton { border: none; padding: 2px 4px; color: %1; border-radius: 4px; } 
+    QPushButton { border: none; padding: %3px %4px; color: %1; border-radius: %5px; } 
     QPushButton:hover { background-color: %2; }
 )";
 
-// Placeholder args: %1: stop0, %2: stop1, %3: Border, %4: LabelText, %5:
-// ProgressBG, %6: ProgressChunk, %7: BtnText, %8: BtnHover
+// Placeholder args
 constexpr auto g_qss_search_banner = R"(
     QWidget#searchBanner { 
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 %1, stop:1 %2);
-        border-bottom: 1px solid %3; 
+        background-color: %1;
+        border-bottom: 1px solid %2; 
     }
-    QLabel { color: %4; font-weight: bold; }
+    QLabel { color: %3; font-weight: 500; }
     QProgressBar { 
-        border: none; background: %5; height: 4px; border-radius: 2px;
+        border: none; background: transparent; height: %4px;
     }
-    QProgressBar::chunk { background-color: %6; border-radius: 2px; }
-    QPushButton { color: %7; font-size: 16px; font-weight: bold; border: none; background: transparent; }
-    QPushButton:hover { color: %8; }
+    QProgressBar::chunk { background-color: transparent; }
+    QPushButton { 
+        color: %5; font-size: %7px; border: none; background: transparent; 
+        padding: 4px %8px; border-radius: 4px;
+    }
+    QPushButton:hover { 
+        color: %6; 
+        background-color: rgba(128, 128, 128, 40); 
+    }
+    QPushButton:pressed {
+        background-color: rgba(128, 128, 128, 60);
+    }
 )";
 
 constexpr auto g_qss_search_list
     = "QListView { background-color: %1; border: none; }";
-
-constexpr auto g_qss_label_query = "font-size: 12px; color: %1;";
-constexpr auto g_qss_label_count = "font-size: 11px; color: %1;";
-constexpr auto g_qss_value_label = "color: %1;";
 
 // --- Helpers ---
 

@@ -1,7 +1,11 @@
 #include "searchresultdelegate.h"
 
-#include <QApplication>
 #include <QPainter>
+#include <QScreen>
+
+#include "../style_assets.h"
+
+using namespace jtv::ui;
 
 SearchResultDelegate::SearchResultDelegate(QObject* parent)
     : QStyledItemDelegate(parent)
@@ -27,66 +31,95 @@ void SearchResultDelegate::paint(QPainter* painter,
         painter->fillRect(rect, option.palette.color(QPalette::AlternateBase));
     }
 
-    // Border bottom
-    painter->setPen(option.palette.color(QPalette::Midlight));
+    // Border bottom (very subtle)
+    QColor borderColor = option.palette.color(QPalette::Midlight);
+    borderColor.setAlpha(80);
+    painter->setPen(borderColor);
     painter->drawLine(rect.bottomLeft(), rect.bottomRight());
 
-    // Extract data
-    QString path = index.data(Qt::UserRole).toString();
-    QString text = index.data(Qt::DisplayRole).toString();
+    // Extract data from custom roles
+    const QString path  = index.data(kUserRolePath).toString();
+    const QString key   = index.data(kUserRoleKey).toString();
+    const QString value = index.data(kUserRoleVal).toString();
+    const QString type  = index.data(kUserRoleType).toString();
 
-    // Splitting key and value from "Key: Value" or "[Path] Value"
-    QString key, value;
-    if (text.contains(": ")) {
-        key   = text.section(": ", 0, 0);
-        value = text.section(": ", 1);
+    // Visual configuration
+    qreal dpr = 1;
+    if (option.widget && option.widget->screen()) {
+        dpr = option.widget->screen()->logicalDotsPerInch() * 1. / 96.0;
     }
-    else if (text.startsWith("[")) {
-        key   = "";
-        value = text.section("] ", 1);
+    int px       = qRound(12 * dpr);
+    int py       = qRound(4 * dpr);
+    int iconSize = qRound(14 * dpr);
+
+    bool isDark = true;
+    if (option.widget) {
+        isDark = option.widget->palette().color(QPalette::Window).lightness()
+                 < 128;
     }
-    else {
-        key   = text;
-        value = "";
-    }
 
-    QFont mainFont = option.font;
-    QFont pathFont = option.font;
-    pathFont.setPointSizeF(mainFont.pointSizeF() * 0.85);
+    QColor textColor   = selected
+                             ? option.palette.color(QPalette::HighlightedText)
+                             : QColor(isDark ? jtv::ui::Colors::DarkText
+                                             : jtv::ui::Colors::LightText);
+    QColor pathColor   = selected
+                             ? textColor
+                             : QColor(isDark ? jtv::ui::Colors::DarkTextDim
+                                             : jtv::ui::Colors::LightTextDim);
+    QColor accentColor = selected ? textColor : jtv::ui::Colors::Accent;
 
-    QColor textColor = option.palette.color(selected ? QPalette::HighlightedText
-                                                     : QPalette::Text);
-    QColor pathColor = selected
-                           ? textColor
-                           : option.palette.color(QPalette::PlaceholderText);
-    QColor accentColor = selected ? textColor : QColor("#0288D1");
+    // Draw Icon based on type
+    const char* svg_data = g_svg_article;  // default string
+    if (type == "o")
+        svg_data = g_svg_object;
+    else if (type == "a")
+        svg_data = g_svg_array;
 
-    // Padding
-    int px = 12;
-    int py = 6;
+    QIcon icon = svgIcon(svg_data, accentColor, 14, dpr);
+    QRect iconRect(rect.left() + px,
+                   rect.top() + (rect.height() - iconSize) / 2, iconSize,
+                   iconSize);
+    icon.paint(painter, iconRect);
 
-    // Draw Key (or label)
-    painter->setFont(mainFont);
+    // Layout
+    int contentX = iconRect.right() + qRound(8 * dpr);
+    int labelY   = rect.top() + py;
+
+    // Draw Key (Medium weight)
+    QFont keyFont = option.font;
+    keyFont.setWeight(QFont::Medium);
+    painter->setFont(keyFont);
     painter->setPen(textColor);
 
-    QString primaryText = key.isEmpty() ? tr("Value") : key;
-    QRect primaryRect   = rect.adjusted(px, py, -px, -rect.height() / 2);
-    painter->drawText(primaryRect, Qt::AlignLeft | Qt::AlignVCenter,
-                      primaryText);
+    QString keyText = key.isEmpty() ? tr("Value") : key;
+    int keyWidth    = painter->fontMetrics().horizontalAdvance(keyText);
+    QRect keyRect(contentX, labelY, keyWidth, rect.height() / 2);
+    painter->drawText(keyRect, Qt::AlignLeft | Qt::AlignTop, keyText);
 
-    // Draw Value snippet
+    // Draw Value (Accent)
     if (!value.isEmpty()) {
-        int labelWidth
-            = painter->fontMetrics().horizontalAdvance(primaryText + "  ");
         painter->setPen(accentColor);
-        painter->drawText(primaryRect.adjusted(labelWidth, 0, 0, 0),
-                          Qt::AlignLeft | Qt::AlignVCenter, value);
+        int spacing = qRound(8 * dpr);
+        QRect valRect(keyRect.right() + spacing, labelY,
+                      rect.width() - keyRect.right() - px - spacing,
+                      rect.height() / 2);
+        QString valText = "  " + value;
+        painter->drawText(valRect, Qt::AlignLeft | Qt::AlignTop, valText);
     }
 
-    // Draw Path (JSON Pointer)
+    // Draw Path (Dimmed, Mono-ish if possible)
+    QFont pathFont = option.font;
+    if (pathFont.pointSizeF() > 0) {
+        pathFont.setPointSizeF(pathFont.pointSizeF() * 0.8);
+    }
+    else {
+        pathFont.setPixelSize(qMax(1, qRound(pathFont.pixelSize() * 0.8)));
+    }
     painter->setFont(pathFont);
     painter->setPen(pathColor);
-    QRect pathRect = rect.adjusted(px, rect.height() / 2, -px, -py);
+
+    QRect pathRect(contentX, rect.top() + rect.height() / 2,
+                   rect.width() - contentX - px, rect.height() / 2 - py);
     painter->drawText(pathRect, Qt::AlignLeft | Qt::AlignVCenter, path);
 
     painter->restore();
@@ -95,5 +128,9 @@ void SearchResultDelegate::paint(QPainter* painter,
 QSize SearchResultDelegate::sizeHint(const QStyleOptionViewItem& option,
                                      const QModelIndex& index) const
 {
-    return QSize(option.rect.width(), 52);
+    qreal dpr = 1.0;
+    if (option.widget && option.widget->screen()) {
+        dpr = option.widget->screen()->logicalDotsPerInch() * 1. / 96.0;
+    }
+    return QSize(option.rect.width(), qRound(40 * dpr));
 }
