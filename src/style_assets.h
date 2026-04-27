@@ -143,6 +143,23 @@ constexpr auto g_qss_search_banner = R"(
 constexpr auto g_qss_search_list
     = "QListView { background-color: %1; border: none; }";
 
+// Placeholder args: %1: SurfaceBG, %2: Border
+constexpr auto g_qss_bottom_bar = R"(
+    QWidget#btmBar {
+        background-color: %1;
+        border-top: 1px solid %2;
+    }
+    QPushButton#textViewBtn {
+        border: none; background: transparent; border-radius: 4px;
+    }
+    QPushButton#textViewBtn:hover {
+        background-color: rgba(128, 128, 128, 40);
+    }
+    QPushButton#textViewBtn:pressed {
+        background-color: rgba(128, 128, 128, 60);
+    }
+)";
+
 // --- Helpers ---
 
 inline QIcon svgIcon(const char* svg_data,

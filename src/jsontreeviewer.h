@@ -39,7 +39,6 @@ private:
     void initTopWnd();
     void initBtmWnd();
     void startBackgroundLoad(JsonTreeModel* model, const QString& path);
-    void updateStatusBarStats(JsonTreeModel* model);
     QString formatFileSize(qint64 bytes) const;
 
     void startSearch();
@@ -55,7 +54,6 @@ private:
         QWidget* breadcrumbs_wnd     = nullptr;
         QHBoxLayout* breadcrumbs_lay = nullptr;
         QLabel* value_label          = nullptr;  // For the " = value" part
-        QLabel* stats                = nullptr;  // Center: node statistics
         QLabel* info = nullptr;  // Right: info icon with tooltip
     } m_btm;
 
@@ -69,8 +67,8 @@ private:
     // Search & Navigation
     SearchPanel* m_search_panel = nullptr;
 
-    bool m_isDark = false;
-    qreal m_dpr   = 1.0;
+    bool m_isDarkMode = false;
+    qreal m_dpr       = 1.0;
 };
 
 /////////////////////////////////////////////////////////////////

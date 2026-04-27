@@ -269,9 +269,6 @@ QVariant JsonTreeModel::data(const QModelIndex& index, int role) const
         // Check if this item's parent is an array
         if (item->parent && item->parent->type == '[') {
             // Array index - use secondary text color (dimmed)
-            bool isDark
-                = qApp->palette().color(QPalette::Window).lightness() < 128;
-            // Use 70% opacity for array indices
             QColor textColor = qApp->palette().color(QPalette::Text);
             textColor.setAlpha(180);  // ~70% opacity (180/255)
             return textColor;
@@ -679,14 +676,15 @@ QString JsonTreeModel::getDotPath(const QModelIndex& index) const
     }
 
     // Join with dots, but handle [index] specially
-    QString result;
-    for (int i = 0; i < parts.size(); ++i) {
-        if (i > 0 && !parts[i].startsWith('[')) {
+    if (parts.isEmpty())
+        return QString();
+
+    QString result = parts[0];
+    for (int i = 1; i < parts.size(); ++i) {
+        if (!parts[i].startsWith('['))
             result += '.';
-        }
         result += parts[i];
     }
-
     return result;
 }
 

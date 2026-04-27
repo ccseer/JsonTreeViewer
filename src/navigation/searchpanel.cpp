@@ -251,9 +251,9 @@ void SearchPanel::updateDPR(qreal r)
     reapplyStyles();
 }
 
-void SearchPanel::updateTheme(bool isDark)
+void SearchPanel::updateTheme(bool isDarkMode)
 {
-    m_isDark = isDark;
+    m_isDarkMode = isDarkMode;
     reapplyStyles();
 }
 
@@ -263,32 +263,38 @@ void SearchPanel::reapplyStyles()
 
     // 0. Container background
     setStyleSheet(QString("QWidget#searchPanel { background-color: %1; }")
-                      .arg(m_isDark ? DarkBG : LightBG));
+                      .arg(m_isDarkMode ? DarkBG : LightBG));
 
-    // 1. Banner style
-    m_banner->setStyleSheet(QString(g_qss_search_banner)
-                                .arg(m_isDark ? "#1E1E1E" : "#F5F5F5")  // BG
-                                .arg(m_isDark ? DarkBorder : LightBorder)
-                                .arg(m_isDark ? DarkText : LightText)
-                                .arg(qRound(2 * m_dpr))  //  QProgressBar height
-                                .arg(m_isDark ? DarkTextDim : LightTextDim)
-                                .arg(m_isDark ? DarkText : LightText)
-                                .arg(qRound(16 * m_dpr))  // FontSize
-                                .arg(qRound(4 * m_dpr))   // BtnPadding
+    // 1. Container and View style
+    m_view->setStyleSheet(
+        QString(g_qss_search_list).arg(m_isDarkMode ? DarkBG : LightBG));
 
+    // 2. Banner style
+    m_banner->setStyleSheet(
+        QString(g_qss_search_banner)
+            .arg(m_isDarkMode ? "#1E1E1E" : "#F5F5F5")  // BG
+            .arg(m_isDarkMode ? DarkBorder : LightBorder)
+            .arg(m_isDarkMode ? DarkText : LightText)
+            .arg(qRound(2 * m_dpr))  //  QProgressBar height
+            .arg(m_isDarkMode ? DarkTextDim : LightTextDim)
+            .arg(m_isDarkMode ? DarkText : LightText)
+            .arg(qRound(16 * m_dpr))  // FontSize
+            .arg(qRound(4 * m_dpr))   // BtnPadding
     );
 
-    m_progress_fill->setStyleSheet(
-        QString("background-color: %1;")
-            .arg(m_isDark ? "rgba(2, 136, 209, 40)" : "rgba(2, 136, 209, 25)"));
+    m_progress_fill->setStyleSheet(QString("background-color: %1;")
+                                       .arg(m_isDarkMode
+                                                ? "rgba(2, 136, 209, 40)"
+                                                : "rgba(2, 136, 209, 25)"));
 
-    // 2. Palette (Base for all children)
+    // 3. Palette (Base for all children)
     QPalette p = palette();
-    QColor textC(m_isDark ? DarkText : LightText);
-    QColor dimC(m_isDark ? DarkTextDim : LightTextDim);
-    QColor bgC(m_isDark ? DarkBG : LightBG);
+    QColor textC(m_isDarkMode ? DarkText : LightText);
+    QColor dimC(m_isDarkMode ? DarkTextDim : LightTextDim);
+    QColor bgC(m_isDarkMode ? DarkBG : LightBG);
 
-    p.setColor(QPalette::Window, QColor(m_isDark ? DarkSurface : LightSurface));
+    p.setColor(QPalette::Window,
+               QColor(m_isDarkMode ? DarkSurface : LightSurface));
     p.setColor(QPalette::WindowText, textC);
     p.setColor(QPalette::Base, bgC);
     p.setColor(QPalette::Text, textC);
@@ -299,12 +305,8 @@ void SearchPanel::reapplyStyles()
     m_label_count->setPalette(p);
     m_view->setPalette(p);
 
-    // 3. Icons
+    // 4. Icons
     m_btn_cancel->setIcon(
         jtv::ui::svgIcon(jtv::ui::g_svg_close,
-                         m_isDark ? DarkTextDim : LightTextDim, 16, m_dpr));
-
-    // 4. View style
-    m_view->setStyleSheet(
-        QString(g_qss_search_list).arg(m_isDark ? DarkBG : LightBG));
+                         m_isDarkMode ? DarkTextDim : LightTextDim, 16, m_dpr));
 }

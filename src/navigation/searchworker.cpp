@@ -130,8 +130,12 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
     if (!tok.empty()) {
         const char* currentPtr = tok.data();
         if (currentPtr >= basePtr && currentPtr < basePtr + m_size) {
-            int progress
-                = static_cast<int>((currentPtr - basePtr) * 100 / m_size);
+            int progress = 0;
+            if (m_size > 0) {
+                // Use qint64 to prevent overflow during multiplication
+                progress = static_cast<int>(
+                    (static_cast<qint64>(currentPtr - basePtr) * 100) / m_size);
+            }
             if (progress > m_lastProgress) {
                 m_lastProgress = progress;
                 emit progressUpdated(progress);

@@ -28,7 +28,7 @@ public:
     void startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
                      const SearchQuery& query);
 
-    void updateTheme(bool isDark);
+    void updateTheme(bool isDarkMode);
     void updateDPR(qreal r);
 
 signals:
@@ -60,6 +60,6 @@ private:
     QPointer<JsonTreeModel> m_model_ref = nullptr;
     bool m_is_navigating                = false;
 
-    bool m_isDark = false;
-    qreal m_dpr   = 1.0;
+    bool m_isDarkMode = false;
+    qreal m_dpr       = 1.0;
 };

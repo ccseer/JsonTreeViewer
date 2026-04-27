@@ -52,20 +52,21 @@ void SearchResultDelegate::paint(QPainter* painter,
     int py       = qRound(4 * dpr);
     int iconSize = qRound(14 * dpr);
 
-    bool isDark = true;
+    bool isDarkMode = true;
     if (option.widget) {
-        isDark = option.widget->palette().color(QPalette::Window).lightness()
-                 < 128;
+        isDarkMode
+            = option.widget->palette().color(QPalette::Window).lightness()
+              < 128;
     }
 
     QColor textColor   = selected
                              ? option.palette.color(QPalette::HighlightedText)
-                             : QColor(isDark ? jtv::ui::Colors::DarkText
-                                             : jtv::ui::Colors::LightText);
+                             : QColor(isDarkMode ? jtv::ui::Colors::DarkText
+                                                 : jtv::ui::Colors::LightText);
     QColor pathColor   = selected
                              ? textColor
-                             : QColor(isDark ? jtv::ui::Colors::DarkTextDim
-                                             : jtv::ui::Colors::LightTextDim);
+                             : QColor(isDarkMode ? jtv::ui::Colors::DarkTextDim
+                                                 : jtv::ui::Colors::LightTextDim);
     QColor accentColor = selected ? textColor : jtv::ui::Colors::Accent;
 
     // Draw Icon based on type
