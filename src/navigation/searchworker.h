@@ -37,6 +37,7 @@ public:
 signals:
     void resultsFound(const QVector<SearchResult>& results);
     void progressUpdated(int percentage);
+    void limitReached(int maxResults);
     void finished(bool success);
 
 private:
@@ -55,7 +56,9 @@ private:
 
     QVector<SearchResult> m_batch;
     QElapsedTimer m_batchTimer;
-    int m_lastProgress               = -1;
-    int m_totalResults               = 0;
-    static constexpr int MAX_RESULTS = 1000;
+    QElapsedTimer m_searchTimer;
+    int m_lastProgress                     = -1;
+    int m_totalResults                     = 0;
+    static constexpr int MAX_RESULTS       = 1000;
+    static constexpr int SEARCH_TIMEOUT_MS = 30000;
 };

@@ -123,6 +123,9 @@ void SearchPanel::startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
         int targetWidth = (m_banner->width() * value) / 100;
         m_progress_fill->setFixedWidth(targetWidth);
     });
+    connect(worker, &SearchWorker::limitReached, this, [this](int max) {
+        m_label_count->setText(tr("%1+ results").arg(max));
+    });
     connect(worker, &SearchWorker::finished, this,
             &SearchPanel::onSearchFinished);
     connect(thread, &QThread::started, worker, &SearchWorker::process);

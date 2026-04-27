@@ -69,19 +69,27 @@ void Config::load()
     settings.endGroup();
 
     settings.beginGroup("Shortcuts");
-    m_shortcutCollapseAll = QKeySequence(
+
+    QKeySequence seq = QKeySequence(
         settings.value("CollapseAll", "Ctrl+Shift+[").toString());
-    m_shortcutExpandAll
-        = QKeySequence(settings.value("ExpandAll", "Ctrl+Shift+]").toString());
-    m_shortcutCopyPath
-        = QKeySequence(settings.value("CopyPath", "Ctrl+Shift+C").toString());
-    m_shortcutExportSelection
-        = QKeySequence(settings.value("ExportSelection", "Ctrl+E").toString());
-    m_shortcutFilter
-        = QKeySequence(settings.value("Filter", "Ctrl+F").toString());
-    m_shortcutToggleMode = QKeySequence(
+    m_shortcutCollapseAll = seq.isEmpty() ? QKeySequence("Ctrl+Shift+[") : seq;
+
+    seq = QKeySequence(settings.value("ExpandAll", "Ctrl+Shift+]").toString());
+    m_shortcutExpandAll = seq.isEmpty() ? QKeySequence("Ctrl+Shift+]") : seq;
+
+    seq = QKeySequence(settings.value("CopyPath", "Ctrl+Shift+C").toString());
+    m_shortcutCopyPath = seq.isEmpty() ? QKeySequence("Ctrl+Shift+C") : seq;
+
+    seq = QKeySequence(settings.value("ExportSelection", "Ctrl+E").toString());
+    m_shortcutExportSelection = seq.isEmpty() ? QKeySequence("Ctrl+E") : seq;
+
+    seq = QKeySequence(settings.value("Filter", "Ctrl+F").toString());
+    m_shortcutFilter = seq.isEmpty() ? QKeySequence("Ctrl+F") : seq;
+
+    seq = QKeySequence(
         settings.value("ToggleMode", QKeySequence(Qt::Key_Tab).toString())
             .toString());
+    m_shortcutToggleMode = seq.isEmpty() ? QKeySequence(Qt::Key_Tab) : seq;
     settings.endGroup();
 
     if (!fileExists) {

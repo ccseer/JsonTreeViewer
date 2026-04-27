@@ -78,6 +78,7 @@ void SearchWorker::process()
         }
 
         m_batchTimer.start();
+        m_searchTimer.start();
         m_totalResults = 0;
         m_lastProgress = -1;
 
@@ -112,8 +113,14 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
 {
     if (QThread::currentThread()->isInterruptionRequested())
         return;
-    if (m_totalResults >= MAX_RESULTS)
+    if (m_totalResults >= MAX_RESULTS) {
+        emit limitReached(MAX_RESULTS);
         return;
+    }
+    if (m_searchTimer.elapsed() > SEARCH_TIMEOUT_MS) {
+        qprintt << "Search timeout after" << SEARCH_TIMEOUT_MS << "ms";
+        return;
+    }
 
     simdjson::ondemand::json_type type;
     if (val.type().get(type) != simdjson::SUCCESS)

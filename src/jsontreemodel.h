@@ -137,11 +137,6 @@ private:
     bool m_waiting_for_first_fetch = false;
     qint64 m_load_start_time       = 0;
 
-    // Legacy members - will be removed after full strategy integration
-    simdjson::ondemand::parser m_parser;
-    simdjson::padded_string m_json_data;
-    simdjson::ondemand::document m_doc;
-
     // Design cache
 private:
     QIcon m_objIcon;

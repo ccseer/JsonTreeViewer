@@ -172,14 +172,10 @@ JsonTreeItem* PathNavigator::findInPagedArray(JsonTreeItem* arrayNode,
 {
     for (int i = 0; i < arrayNode->children.size(); ++i) {
         JsonTreeItem* child = arrayNode->children[i];
-        if (child->key.startsWith("[")) {  // Paged placeholder
-            int start, end;
-            // Use QByteArray or similar if needed, but here key is QString
-            QByteArray keyBytes = child->key.toUtf8();
-            if (sscanf(keyBytes.constData(), "[%d..%d]", &start, &end) == 2) {
-                if (targetIndex >= start && targetIndex <= end) {
-                    return child;
-                }
+        if (child->is_virtual_page) {
+            if (targetIndex >= child->page_start
+                && targetIndex <= child->page_end) {
+                return child;
             }
         }
     }

@@ -283,10 +283,9 @@ QVector<JsonTreeItem*> FetchWorker::createPagedChildren(int total_children)
         int end = qMin(start + page_size - 1, total - 1);
 
         // Create virtual page node
-        QString page_key        = QString("[%1..%2]").arg(start).arg(end);
-        JsonTreeItem* page_node = new JsonTreeItem(
-            page_key, m_parent_pointer,
-            static_cast<char>(simdjson::ondemand::json_type::array));
+        QString page_key = QString("[%1..%2]").arg(start).arg(end);
+        JsonTreeItem* page_node
+            = new JsonTreeItem(page_key, m_parent_pointer, '[');
 
         page_node->is_virtual_page = true;
         page_node->page_start      = start;
