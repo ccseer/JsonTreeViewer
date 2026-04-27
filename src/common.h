@@ -26,11 +26,15 @@ class JTVThread : public QThread {
     using QThread::run;
 
 public:
-    explicit JTVThread(QObject* parent = nullptr) : QThread(parent) {}
+    explicit JTVThread(QObject* parent = nullptr) : QThread(parent)
+    {
+        // qprint << this;
+    }
 
     ~JTVThread() override
     {
         quit();
         wait();
+        // qprint << "~" << this;
     }
 };

@@ -9,14 +9,16 @@
 #include <QStandardItemModel>
 #include <QVBoxLayout>
 
-#include "../common.h"
 #include "../jsontreemodel.h"
 #include "../style_assets.h"
 #include "searchresultdelegate.h"
 
+#define qprintt qprint << "[SearchPanel]"
+
 using namespace jtv::ui;
 
-SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
+SearchPanel::SearchPanel(JsonTreeModel* model, QWidget* parent)
+    : QWidget(parent), m_model_ref(model)
 {
     auto* mainLay = new QVBoxLayout(this);
     mainLay->setContentsMargins(0, 0, 0, 0);
@@ -30,7 +32,6 @@ SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
     // Banner UI
     m_banner = new QWidget(this);
     m_banner->setObjectName("searchBanner");
-    m_banner->setFixedHeight(32);
     m_banner->setStyleSheet(g_qss_search_banner);
 
     auto* bannerLay = new QHBoxLayout(m_banner);
@@ -44,8 +45,6 @@ SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
     m_progress = new QProgressBar(this);
     m_progress->setRange(0, 100);
     m_progress->setTextVisible(false);
-    m_progress->setFixedWidth(80);
-    m_progress->setFixedHeight(4);
     m_progress->hide();
     bannerLay->addWidget(m_progress);
 
@@ -71,10 +70,10 @@ SearchPanel::SearchPanel(QWidget* parent) : QWidget(parent)
     mainLay->addWidget(m_view);
 
     connect(m_view, &QListView::clicked, this, &SearchPanel::onResultClicked);
-    connect(m_btn_cancel, &QPushButton::clicked, this,
-            &SearchPanel::cancelSearch);
-    connect(m_btn_cancel, &QPushButton::clicked, this,
-            &SearchPanel::cancelRequested);
+    connect(m_btn_cancel, &QPushButton::clicked, this, [this]() {
+        qprintt << "Cancel button clicked";
+        cancelSearch();
+    });
 }
 
 SearchPanel::~SearchPanel()
@@ -82,12 +81,10 @@ SearchPanel::~SearchPanel()
     cancelSearch();
 }
 
-void SearchPanel::startSearch(JsonTreeModel* model,
-                              std::shared_ptr<JsonViewerStrategy> strategy,
+void SearchPanel::startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
                               const SearchQuery& query)
 {
     cancelSearch();
-    m_model_ref = model;
 
     m_results_model->clear();
     m_results_model->setHorizontalHeaderLabels({tr("Results")});
@@ -99,31 +96,33 @@ void SearchPanel::startSearch(JsonTreeModel* model,
     m_btn_cancel->show();
     show();
 
-    // Create background thread with no parent for true async cleanup
-    auto* thread    = new JTVThread;
-    m_search_thread = thread;
-
-    // Safety: hold strategy to keep memory alive
-    auto* worker    = new SearchWorker(strategy, query);
-    m_search_worker = worker;
-
-    // Chained cleanup
-    connect(worker, &QObject::destroyed, thread, &QObject::deleteLater);
-
+    auto* thread                  = new JTVThread;
+    QPointer<SearchWorker> worker = new SearchWorker(strategy, query);
     connect(this, &QObject::destroyed, [worker, thread]() {
-        if (thread) {
+        if (worker) {
+            qprintt << "[SEARCH ASYNC] SearchPanel destroyed, requesting "
+                       "worker to stop";
             thread->requestInterruption();
-            thread->quit();
         }
     });
-
-    connect(thread, &QThread::started, worker, &SearchWorker::process);
+    connect(worker, &QObject::destroyed, thread, &QObject::deleteLater);
+    connect(this, &SearchPanel::cancelRequested, worker, [worker, thread]() {
+        if (worker) {
+            qprintt << "[SEARCH ASYNC] Requesting worker to stop";
+            thread->requestInterruption();
+        }
+        else {
+            qprintt << "[SEARCH ASYNC] Worker already destroyed, cannot cancel";
+        }
+    });
+    // Business logic
     connect(worker, &SearchWorker::resultsFound, this,
             &SearchPanel::onResultsFound);
     connect(worker, &SearchWorker::progressUpdated, m_progress,
             &QProgressBar::setValue);
     connect(worker, &SearchWorker::finished, this,
             &SearchPanel::onSearchFinished);
+    connect(thread, &QThread::started, worker, &SearchWorker::process);
 
     worker->moveToThread(thread);
     thread->start();
@@ -131,17 +130,7 @@ void SearchPanel::startSearch(JsonTreeModel* model,
 
 void SearchPanel::cancelSearch()
 {
-    if (m_search_thread) {
-        if (m_search_thread->isRunning()) {
-            m_search_thread->requestInterruption();
-            m_search_thread->quit();
-        }
-        // m_search_thread will be nulled by QPointer when deleteLater is
-        // processed, but we null it now to prevent double-cancel logic on next
-        // call.
-        m_search_thread = nullptr;
-    }
-    m_search_worker = nullptr;
+    emit cancelRequested();
     m_btn_cancel->hide();
     m_progress->hide();
 }
@@ -178,6 +167,7 @@ void SearchPanel::onSearchFinished(bool success)
 void SearchPanel::onResultClicked(const QModelIndex& index)
 {
     QString path = index.data(Qt::UserRole).toString();
+    qprintt << "Result clicked: " << path;
     if (!path.isEmpty() && m_model_ref) {
         m_navigator->navigate(m_model_ref, path);
     }
@@ -186,6 +176,8 @@ void SearchPanel::onResultClicked(const QModelIndex& index)
 void SearchPanel::onNavigationCompleted(NavigationError error,
                                         const QString& message)
 {
+    qprintt << "Navigation completed with error code:"
+            << static_cast<int>(error) << "message:" << message;
     if (error == NavigationError::Success) {
         emit targetResolved(m_navigator->currentIndex());
     }
@@ -222,6 +214,7 @@ void SearchPanel::updateDPR(qreal r)
     m_label_query->setFont(f1);
     m_label_count->setFont(f2);
 }
+
 void SearchPanel::updateTheme(bool isDark)
 {
     using namespace jtv::ui::Colors;

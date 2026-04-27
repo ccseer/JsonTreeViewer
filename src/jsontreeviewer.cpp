@@ -44,7 +44,6 @@ JsonTreeViewer::JsonTreeViewer(QWidget* parent) : ViewerBase(parent)
 JsonTreeViewer::~JsonTreeViewer()
 {
     qprintt << "~" << this;
-    cancelSearch();
 }
 
 void JsonTreeViewer::initTopWnd()
@@ -77,10 +76,9 @@ void JsonTreeViewer::initTopWnd()
 
     connect(m_top.action_global, &QAction::toggled, this,
             [this, iconColor, dpr](bool checked) {
-                auto activeColor = QColor("#0288D1");
-                m_top.action_global->setIcon(
-                    svgIcon(checked ? g_svg_globe : g_svg_filter,
-                            checked ? activeColor : iconColor, 16, dpr));
+                m_top.action_global->setIcon(svgIcon(
+                    checked ? g_svg_globe : g_svg_filter,
+                    checked ? jtv::ui::Colors::Accent : iconColor, 16, dpr));
                 m_top.input->setPlaceholderText(
                     checked ? tr("Deep search entire file (Enter)...")
                             : tr("Filter current view..."));
@@ -92,14 +90,12 @@ void JsonTreeViewer::initTopWnd()
                     if (m_search_panel)
                         m_search_panel->hide();
                     // Force reset filter to show all items
-                    auto* proxy
-                        = qobject_cast<TreeFilterProxyModel*>(m_view->model());
-                    if (proxy)
+                    if (auto* proxy
+                        = qobject_cast<TreeFilterProxyModel*>(m_view->model()))
                         proxy->updateFilter("");
                 }
                 else {
                     // Mode: Search -> Filter
-                    cancelSearch();
                     if (m_search_panel) {
                         m_search_panel->clear();
                         m_search_panel->hide();
@@ -182,7 +178,7 @@ void JsonTreeViewer::updateDPR(qreal r)
         m_btm.wnd_bg->setFixedHeight(24 * r);
         m_btm.wnd_bg->layout()->setContentsMargins(12 * r, 0, 12 * r, 0);
         m_btm.wnd_bg->layout()->setSpacing(12);
-        m_btm.breadcrumbs_lay->setContentsMargins(8 * r, 0, 0, 0);
+        m_btm.breadcrumbs_lay->setContentsMargins(0, 0, 0, 0);
         // Status bar labels
         auto sbFont = qApp->font();
         sbFont.setPixelSize(11 * r);
@@ -254,7 +250,16 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
     m_view->setModel(proxy_model);
     lay_content->addWidget(m_view);
 
-    m_search_panel = new SearchPanel(this);
+    // Subtle progress bar
+    m_progress_bar = new QProgressBar(this);
+    m_progress_bar->setRange(0, 0);  // Indeterminate
+    m_progress_bar->setTextVisible(false);
+    m_progress_bar->setFixedHeight(2);
+    m_progress_bar->setStyleSheet(g_qss_progress_bar);
+    m_progress_bar->hide();
+    lay_content->addWidget(m_progress_bar);
+
+    m_search_panel = new SearchPanel(m_model, this);
     m_search_panel->hide();
     lay_content->addWidget(m_search_panel);
     connect(m_search_panel, &SearchPanel::targetResolved, this,
@@ -268,12 +273,22 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                     proxyIndex = proxy->mapFromSource(index);
 
                 if (proxyIndex.isValid()) {
+                    // Expand all parents to ensure target is visible
+                    QModelIndex p = proxyIndex.parent();
+                    while (p.isValid()) {
+                        m_view->expand(p);
+                        p = p.parent();
+                    }
+
                     m_view->setCurrentIndex(proxyIndex);
                     m_view->scrollTo(proxyIndex,
                                      QAbstractItemView::PositionAtCenter);
                     m_view->selectionModel()->select(
                         proxyIndex, QItemSelectionModel::ClearAndSelect
                                         | QItemSelectionModel::Rows);
+
+                    // Return focus to tree view for immediate interaction
+                    m_view->setFocus();
                 }
             });
     connect(m_search_panel, &SearchPanel::navigationFailed, this,
@@ -281,17 +296,6 @@ void JsonTreeViewer::loadImpl(QBoxLayout* lay_content, QHBoxLayout* lay_ctrlbar)
                 emit sigCommand(ViewCommandType::VCT_ShowToastMsg,
                                 tr("Navigation Failed: %1").arg(msg));
             });
-    connect(m_search_panel, &SearchPanel::cancelRequested, this,
-            &JsonTreeViewer::cancelSearch);
-
-    // Subtle progress bar
-    m_progress_bar = new QProgressBar(this);
-    m_progress_bar->setRange(0, 0);  // Indeterminate
-    m_progress_bar->setTextVisible(false);
-    m_progress_bar->setFixedHeight(2);
-    m_progress_bar->setStyleSheet(g_qss_progress_bar);
-    m_progress_bar->hide();
-    lay_content->addWidget(m_progress_bar);
 
     // Status bar with three sections
     initBtmWnd();
@@ -699,6 +703,17 @@ void JsonTreeViewer::startBackgroundLoad(JsonTreeModel* model,
             m_view->setCopyActions(model->supportedActions());
             m_view->setFileMode(model->fileMode());
 
+            // Disable Deep Search for small files since they are fully loaded
+            if (m_top.action_global) {
+                if (model->fileMode() == FileMode::Small) {
+                    m_top.action_global->setChecked(false);
+                    m_top.action_global->setVisible(false);
+                }
+                else {
+                    m_top.action_global->setVisible(true);
+                }
+            }
+
             // Check for parse errors
             const auto* metrics = model->metrics();
             if (metrics && !metrics->parseError.isEmpty()) {
@@ -977,11 +992,5 @@ void JsonTreeViewer::startSearch()
     query.type          = SearchType::All;
     query.caseSensitive = false;
 
-    m_search_panel->startSearch(m_model, strategy, query);
-}
-
-void JsonTreeViewer::cancelSearch()
-{
-    if (m_search_panel)
-        m_search_panel->cancelSearch();
+    m_search_panel->startSearch(strategy, query);
 }

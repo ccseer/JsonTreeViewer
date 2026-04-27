@@ -21,13 +21,11 @@ class JsonViewerStrategy;
 class SearchPanel : public QWidget {
     Q_OBJECT
 public:
-    explicit SearchPanel(QWidget* parent = nullptr);
+    explicit SearchPanel(JsonTreeModel* model, QWidget* parent = nullptr);
     ~SearchPanel() override;
 
-    void startSearch(JsonTreeModel* model,
-                     std::shared_ptr<JsonViewerStrategy> strategy,
+    void startSearch(std::shared_ptr<JsonViewerStrategy> strategy,
                      const SearchQuery& query);
-    void cancelSearch();
     void updateTheme(bool isDark);
     void clear();
     void updateDPR(qreal r);
@@ -49,6 +47,8 @@ private slots:
     void onNavigationCompleted(NavigationError error, const QString& message);
 
 private:
+    void cancelSearch();
+
     QWidget* m_banner;
     QLabel* m_label_query;
     QLabel* m_label_count;
@@ -58,8 +58,6 @@ private:
 
     // Encapsulated Logic
     QStandardItemModel* m_results_model;
-    QPointer<JTVThread> m_search_thread;
-    SearchWorker* m_search_worker = nullptr;
-    PathNavigator* m_navigator    = nullptr;
+    PathNavigator* m_navigator = nullptr;
     QPointer<JsonTreeModel> m_model_ref;
 };

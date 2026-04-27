@@ -3,8 +3,8 @@
 #include <QModelIndex>
 #include <QObject>
 #include <QPointer>
-#include <QStringList>
 
+class QTimer;
 class JsonTreeModel;
 class JsonTreeItem;
 
@@ -16,8 +16,6 @@ enum class NavigationError {
     FetchTimeout
 };
 
-class QTimer;
-
 class PathNavigator : public QObject {
     Q_OBJECT
 public:
@@ -25,7 +23,7 @@ public:
 
     void navigate(JsonTreeModel* model, const QString& jsonPointer);
 
-    QModelIndex currentIndex() const
+    const QModelIndex& currentIndex() const
     {
         return m_currentIndex;
     }

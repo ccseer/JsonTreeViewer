@@ -37,17 +37,26 @@ QColor parseColorValue(const QString& value)
     if (value.isEmpty())
         return {};
 
+    // Strip quotes if present (strategies now include them in the preview)
+    QString str = value;
+    if (str.size() >= 2 && str.startsWith('"') && str.endsWith('"')) {
+        str = str.mid(1, str.size() - 2);
+    }
+
+    if (str.isEmpty())
+        return {};
+
     // #RGB or #RRGGBB
     static QRegularExpression hexColor(R"(^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$)");
-    auto match = hexColor.match(value);
+    auto match = hexColor.match(str);
     if (match.hasMatch()) {
-        return QColor(value);
+        return QColor(str);
     }
 
     // rgb(r, g, b) or rgba(r, g, b, a)
     static QRegularExpression rgbColor(
         R"(^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$)");
-    match = rgbColor.match(value);
+    match = rgbColor.match(str);
     if (match.hasMatch()) {
         int r = match.captured(1).toInt();
         int g = match.captured(2).toInt();

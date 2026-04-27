@@ -94,7 +94,7 @@ constexpr auto g_svg_array = R"SVG(
 // Placeholder args: %1: SurfaceBG, %2: Border, %3: InputBG, %4: Text, %5:
 // Accent
 constexpr auto g_qss_top_bar = R"(
-    QWidget#topBar { background-color: %1; border-bottom: 1px solid %2; }
+    QWidget#topBar { background-color: %1; border: none; }
     QLineEdit { 
         background-color: %3; border: 1px solid %2; border-radius: 4px; 
         color: %4; padding: 4px 10px; selection-background-color: %5; 

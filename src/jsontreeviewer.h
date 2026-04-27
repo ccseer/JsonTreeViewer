@@ -42,7 +42,6 @@ private:
     QString formatFileSize(qint64 bytes) const;
 
     void startSearch();
-    void cancelSearch();
 
     struct {
         QWidget* wnd_bg        = nullptr;

@@ -1,15 +1,15 @@
 #include "searchworker.h"
 
-#include <QDebug>
-#include <QRegularExpression>
 #include <QScopeGuard>
-#include <QThread>
+
+#define qprintt qprint << "[SearchWorker]"
 
 SearchWorker::SearchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
                            const SearchQuery& query,
                            QObject* parent)
     : QObject(parent), m_strategy(strategy), m_query(query)
 {
+    qprintt << this;
     m_data = strategy->dataPtr();
     m_size = strategy->dataSize();
 
@@ -22,39 +22,58 @@ SearchWorker::SearchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
         m_re = QRegularExpression(m_query.text, options);
 
         if (!m_re.isValid()) {
-            qDebug() << "SearchWorker: Invalid regex:" << m_re.errorString();
+            qprintt << "Invalid regex:" << m_re.errorString();
         }
     }
 }
 
+SearchWorker::~SearchWorker()
+{
+    qprintt << "~" << this;
+}
+
 void SearchWorker::process()
 {
+    bool success = false;
     // Chained cleanup trigger
-    QScopeGuard _cleanup([this]() { this->deleteLater(); });
+    QScopeGuard _cleanup([this, &success]() {
+        qprintt << "Cleaning up, calling deleteLater" << success;
+        emit finished(success);
+        this->deleteLater();
+    });
+
+    qprintt << "SearchWorker::process enter for:" << m_query.text
+            << QThread::currentThread();
 
     if (!m_data || m_size == 0) {
-        emit finished(false);
+        qprintt << "No data to search";
         return;
     }
-
     if (m_query.useRegex && !m_re.isValid()) {
-        emit finished(false);
+        qprintt << "Cannot perform search due to invalid regex";
         return;
     }
 
-    simdjson::ondemand::parser parser;
+    if (QThread::currentThread()->isInterruptionRequested()) {
+        qprintt << "Search interrupted before start";
+        return;
+    }
 
     try {
+        simdjson::ondemand::parser parser;
         // NO COPY: Use m_data directly as the strategy guarantees it's padded.
         simdjson::ondemand::document doc;
-        auto error
+        if (auto e
             = parser
                   .iterate(m_data, m_size, m_size + simdjson::SIMDJSON_PADDING)
-                  .get(doc);
-        if (error) {
-            qDebug() << "SearchWorker: Simdjson error:"
-                     << simdjson::error_message(error);
-            emit finished(false);
+                  .get(doc)) {
+            qprintt << "SearchWorker: Simdjson error:"
+                    << simdjson::error_message(e);
+            return;
+        }
+
+        if (QThread::currentThread()->isInterruptionRequested()) {
+            qprintt << "Search interrupted after parsing";
             return;
         }
 
@@ -67,20 +86,22 @@ void SearchWorker::process()
             searchRecursive(val, "", "", m_data);
         }
 
+        if (QThread::currentThread()->isInterruptionRequested()) {
+            qprintt << "Search interrupted after searchRecursive";
+            return;
+        }
+
         emitBatch(true);
-        emit finished(true);
+        success = true;
     }
     catch (const simdjson::simdjson_error& e) {
-        qDebug() << "SearchWorker: simdjson error:" << e.what();
-        emit finished(false);
+        qprintt << "simdjson error:" << e.what();
     }
     catch (const std::exception& e) {
-        qDebug() << "SearchWorker: Exception:" << e.what();
-        emit finished(false);
+        qprintt << "Exception:" << e.what();
     }
     catch (...) {
-        qDebug() << "SearchWorker: Unknown exception";
-        emit finished(false);
+        qprintt << "Unknown exception";
     }
 }
 
@@ -186,8 +207,10 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
         simdjson::ondemand::object obj;
         if (val.get_object().get(obj) == simdjson::SUCCESS) {
             for (auto field : obj) {
-                if (QThread::currentThread()->isInterruptionRequested())
+                if (QThread::currentThread()->isInterruptionRequested()) {
+                    qprintt << "Search interrupted during object iteration";
                     return;
+                }
                 std::string_view key_view;
                 if (field.unescaped_key().get(key_view) == simdjson::SUCCESS) {
                     QString key
@@ -209,8 +232,10 @@ void SearchWorker::searchRecursive(simdjson::ondemand::value val,
         if (val.get_array().get(arr) == simdjson::SUCCESS) {
             int index = 0;
             for (auto element : arr) {
-                if (QThread::currentThread()->isInterruptionRequested())
+                if (QThread::currentThread()->isInterruptionRequested()) {
+                    qprintt << "Search interrupted during array iteration";
                     return;
+                }
                 QString nextPath = currentPath + "/" + QString::number(index);
                 simdjson::ondemand::value nextVal;
                 if (element.get(nextVal) == simdjson::SUCCESS)
@@ -230,8 +255,7 @@ bool SearchWorker::matches(const QString& text)
         return false;
     if (m_query.useRegex)
         return m_re.isValid() && m_re.match(text).hasMatch();
-    Qt::CaseSensitivity cs
-        = m_query.caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
+    auto cs = m_query.caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
     return text.contains(m_query.text, cs);
 }
 

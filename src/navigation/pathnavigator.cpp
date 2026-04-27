@@ -1,8 +1,6 @@
 #include "pathnavigator.h"
 
-#include <QDebug>
 #include <QTimer>
-#include <cstdio>
 
 #include "../jsonnode.h"
 #include "../jsontreemodel.h"
@@ -88,8 +86,10 @@ void PathNavigator::navigateNextLevel()
 
         if (row != -1) {
             m_currentIndex = m_model->index(row, 0, m_currentIndex);
-            m_currentDepth++;
-            emit navigationProgress(m_currentDepth, m_pathSegments.size());
+            if (!child->is_virtual_page) {
+                m_currentDepth++;
+                emit navigationProgress(m_currentDepth, m_pathSegments.size());
+            }
             navigateNextLevel();
         }
         else {
@@ -130,13 +130,20 @@ JsonTreeItem* PathNavigator::findChild(JsonTreeItem* parentItem,
 {
     if (parentItem->type == '[') {
         bool ok;
-        int index = segment.toInt(&ok);
+        int targetIdx = segment.toInt(&ok);
         if (ok) {
-            if (index >= 0 && index < parentItem->children.size()) {
-                return parentItem->children[index];
+            int relativeIdx = targetIdx;
+            if (parentItem->is_virtual_page) {
+                relativeIdx -= parentItem->page_start;
             }
-            // Check for paged placeholder
-            return findInPagedArray(parentItem, index);
+
+            if (relativeIdx >= 0 && relativeIdx < parentItem->children.size()) {
+                return parentItem->children[relativeIdx];
+            }
+            // Check for paged placeholder (only if we're not already in one)
+            if (!parentItem->is_virtual_page) {
+                return findInPagedArray(parentItem, targetIdx);
+            }
         }
     }
     else {

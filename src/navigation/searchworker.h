@@ -1,12 +1,7 @@
 #pragma once
 
-#include <simdjson.h>
-
 #include <QElapsedTimer>
-#include <QObject>
 #include <QRegularExpression>
-#include <QString>
-#include <QVector>
 #include <memory>
 
 #include "../strategies/jsonstrategy.h"
@@ -26,7 +21,6 @@ struct SearchResult {
     QString path;
     char type = '?';  // 'o', 'a', 's', 'n', 'b', 'u' (null)
 };
-
 Q_DECLARE_METATYPE(SearchResult)
 Q_DECLARE_METATYPE(QVector<SearchResult>)
 
@@ -36,9 +30,9 @@ public:
     explicit SearchWorker(std::shared_ptr<JsonViewerStrategy> strategy,
                           const SearchQuery& query,
                           QObject* parent = nullptr);
+    ~SearchWorker();
 
-public slots:
-    void process();
+    Q_SLOT void process();
 
 signals:
     void resultsFound(const QVector<SearchResult>& results);
@@ -63,5 +57,5 @@ private:
     QElapsedTimer m_batchTimer;
     int m_lastProgress               = -1;
     int m_totalResults               = 0;
-    static constexpr int MAX_RESULTS = 10000;
+    static constexpr int MAX_RESULTS = 1000;
 };
