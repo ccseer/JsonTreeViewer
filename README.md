@@ -2,9 +2,9 @@
 
 **A high-performance JSON viewer and editor for Windows** — built as a native plugin for [Seer](https://1218.io), the quick-look file preview tool.
 
-<!-- ## Screenshots
+## Screenshots
 
-![](res/screenshot.png) -->
+![alt text](res/ScreenShot_2026-05-04_192623_575.png)
 
 JsonTreeViewer is a professional-grade JSON tree viewer and navigator built with C++ and Qt 6, powered by [simdjson](https://github.com/simdjson/simdjson/) 4.6.3 for blazing-fast parsing. Designed specifically for **[Seer](https://1218.io)** users who need to preview, navigate, and analyze large JSON files instantly — without opening a full IDE.
 
